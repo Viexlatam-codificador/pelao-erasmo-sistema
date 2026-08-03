@@ -4,25 +4,23 @@ Este archivo es un resumen del proyecto para que una sesión nueva de Claude
 Code (u otro desarrollador) pueda continuar sin perder contexto. Léelo
 completo antes de tocar código.
 
-## 🔴 Pendiente urgente: falta correr una migración SQL (precio de despacho)
+## ✅ Todas las migraciones SQL corridas y verificadas (al 2026-08-03, 16:10)
 
-✅ La migración anterior (sábado/domingo + día manual) **ya se corrió** —
-confirmado, `pedidos.dia_reparto_manual` existe y "Todos los pedidos" ya
-carga bien.
+- Sábado/domingo + día manual (`pedidos.dia_reparto_manual`): ✅ corrida.
+- Precio de despacho (`comunas_rutas.precio_despacho`): ✅ corrida y
+  verificada vía `api/comunas-publicas.js` en producción (todas las
+  comunas parten en $0, el admin las va actualizando desde la pestaña
+  Comunas/Rutas).
 
-Ahora falta una migración nueva y chica para el **precio de despacho por
-comuna** (columna `comunas_rutas.precio_despacho`, ya en el código pero no
-en la base de datos todavía). Sin esto, la pestaña Comunas/Rutas va a fallar
-al intentar guardar o mostrar el precio de despacho.
+No queda ninguna migración pendiente. Si se recrea el proyecto desde cero
+alguna vez, `schema.sql` ya incluye todo (no hay que aplicar nada aparte).
 
-**Correr esto una sola vez en Supabase → SQL Editor → Run**:
+### ⚠️ Siguiente paso para el cliente (no técnico, solo uso)
 
-```sql
-alter table public.comunas_rutas add column if not exists precio_despacho integer not null default 0 check (precio_despacho >= 0);
-```
-
-Ya está agregado también al final de `schema.sql` (por si se recrea el
-proyecto desde cero alguna vez, no hay que aplicar esto aparte).
+El precio de despacho de cada comuna parte en $0 — hay que entrar a
+`admin.html` → pestaña **Comunas/Rutas** y cargar el precio real de cada
+una en la columna "Despacho ($)" para que el cliente lo vea correcto en la
+landing pública.
 
 ## ✅ Estado al 2026-08-03: sistema completo funcionando en producción
 
