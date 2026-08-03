@@ -84,7 +84,12 @@
           <option value="">Todos los vendedores</option>
         </select>
         <button class="icon-btn" onclick="cargarPedidos()">Filtrar</button>
+        <button class="icon-btn" onclick="imprimirRuta()">🖨️ Imprimir ruta</button>
       </div>
+      <p style="font-size:.78rem;color:#888;margin:-6px 0 14px;">
+        Consejo: elige un día en "Todos los días" antes de imprimir, para que la ruta sea solo de ese día.
+        Los pedidos anulados o ya entregados no se incluyen en la impresión.
+      </p>
 
       <div id="pedidosWrap"><p class="empty-state">Cargando pedidos...</p></div>
     </section>
@@ -383,6 +388,80 @@
         <tbody>${filas}</tbody>
       </table>
     `;
+  }
+
+  function imprimirRuta() {
+    const todos = window.__pedidosCache || [];
+    const pedidosRuta = todos
+      .filter(p => p.estado !== "anulado" && p.estado !== "entregado")
+      .sort((a, b) => {
+        const comunaCmp = (a.comuna || "").localeCompare(b.comuna || "", "es");
+        if (comunaCmp !== 0) return comunaCmp;
+        return (a.direccion || "").localeCompare(b.direccion || "", "es");
+      });
+
+    if (pedidosRuta.length === 0) {
+      alert("No hay pedidos para imprimir con los filtros actuales (recuerda: los anulados y entregados no se incluyen).");
+      return;
+    }
+
+    const diaSeleccionado = document.getElementById("filtroDia").value;
+    const tituloDia = diaSeleccionado ? DIA_LABEL[diaSeleccionado] : "Todos los días";
+    const hoy = new Date().toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+    const filas = pedidosRuta.map((p, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${p.nombre_cliente}</td>
+        <td>${p.telefono}</td>
+        <td>${p.direccion}${p.numero ? " " + p.numero : ""}${p.departamento ? ", depto " + p.departamento : ""}</td>
+        <td>${p.comuna}</td>
+        <td style="text-align:center;">${p.cantidad_pipeno || 0}</td>
+        <td style="text-align:center;">${p.cantidad_granadina || 0}</td>
+        <td>${money(p.total)}</td>
+        <td>${p.forma_pago}</td>
+        <td>${p.observaciones || ""}</td>
+      </tr>
+    `).join("");
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+      <meta charset="UTF-8">
+      <title>Ruta de reparto — ${tituloDia}</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:24px;color:#222;}
+        h1{font-size:1.3rem;margin:0 0 4px;}
+        p.meta{color:#555;margin:0 0 18px;font-size:.9rem;}
+        table{width:100%;border-collapse:collapse;font-size:.85rem;}
+        th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top;}
+        th{background:#f0f0f0;}
+        @media print{ body{margin:10px;} }
+      </style>
+      </head>
+      <body>
+        <h1>El Pelao Erasmo — Ruta de reparto</h1>
+        <p class="meta">Día: <b>${tituloDia}</b> · Generado el ${hoy} · ${pedidosRuta.length} pedido(s)</p>
+        <table>
+          <thead>
+            <tr><th>#</th><th>Cliente</th><th>Teléfono</th><th>Dirección</th><th>Comuna</th><th>Pipeño</th><th>Granadina</th><th>Total</th><th>Pago</th><th>Notas</th></tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const ventana = window.open("", "_blank");
+    if (!ventana) {
+      alert("El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para este sitio e intenta de nuevo.");
+      return;
+    }
+    ventana.document.write(html);
+    ventana.document.close();
+    ventana.focus();
+    ventana.print();
   }
 
   async function cambiarEstado(id, nuevoEstado) {

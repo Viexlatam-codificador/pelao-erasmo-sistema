@@ -198,30 +198,35 @@ reflejado en `schema.sql` y en los módulos construidos.
   corre en el navegador). Pídesela al cliente cuando la necesites, y bajo
   ningún motivo la guardes en un archivo que se vaya a commitear.
 
-## Bootstrap pendiente (antes de poder probar login)
+## Bootstrap: ✅ completo
 
-El cliente debe crear a mano el primer usuario admin en el dashboard de
-Supabase (Authentication → Users → Add user, con email
-`admin@pelaoerasmo.internal`), y luego insertar la fila correspondiente en
-`public.perfiles` vía SQL Editor. Instrucciones exactas ya se le dieron por
-chat. Confirmar si ya lo hizo.
+Ya no depende de que el cliente cree nada a mano. Se creó vía
+`scripts/crear-cuentas-iniciales.js`: cuenta `admin`, cuenta de sistema
+`pedidos-web`, y `vendedor1`/`vendedor2`/`vendedor3`. Login de `admin`
+probado en producción de punta a punta (ver más abajo).
 
 ## Lo que falta por construir (módulos pendientes, en orden)
 
-1. **Motor de rutas / pantalla "Generar ruta"** — seleccionar
-   hoy/mañana/fecha/día de la semana → listar pedidos de esa ruta. Podría
-   vivir como una pestaña más dentro de `admin.html`.
-2. **Exportación a Excel** — botón que genera un `.xlsx` en el navegador
-   (evaluar SheetJS vía CDN, mismo patrón que el resto del proyecto) con las
-   columnas que pidió el cliente, ordenado por comuna y luego dirección,
-   con filtros/formato de tabla.
+1. **Imprimir ruta: ✅ hecho.** En la pestaña "Pedidos" de `admin.html` hay
+   un botón "🖨️ Imprimir ruta" que abre una hoja lista para imprimir con
+   los pedidos filtrados actualmente (usa el filtro "Todos los días" para
+   acotar a un día específico), ordenados por comuna y luego dirección.
+   Excluye automáticamente pedidos `anulado` y `entregado` (no tiene
+   sentido llevarlos en la ruta de reparto). Lógica de filtro/orden
+   verificada con datos de prueba. El único paso no verificable en el
+   entorno de pruebas es el diálogo nativo de impresión del sistema
+   operativo en sí (`window.print()`) — es comportamiento estándar del
+   navegador, no código nuestro, así que no hay razón para dudar que
+   funcione para el usuario real.
+2. **Exportación a Excel** — todavía no construido. Sería un botón que
+   genera un `.xlsx` en el navegador (evaluar SheetJS vía CDN, mismo patrón
+   que el resto del proyecto), con las mismas columnas y orden que ya tiene
+   "Imprimir ruta". Como la función de imprimir ya filtra/ordena bien, se
+   puede reutilizar esa misma lógica cuando se construya esto.
 3. **Vista de historial** dentro del panel admin (por ahora el historial ya
    se registra solo en la base de datos vía trigger; falta la UI para verlo).
 4. Preparar la arquitectura para integrar la API de Google Maps más adelante
    (no implementar ahora, solo no bloquear el camino).
-5. **Probar `admin.html` y `api/admin-users.js` contra el Supabase real**
-   una vez que el cliente confirme el bootstrap del admin y el proyecto esté
-   desplegado en Vercel (ver "Despliegue").
 
 ## Despliegue
 
