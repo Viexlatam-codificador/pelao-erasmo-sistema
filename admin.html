@@ -207,6 +207,32 @@
   </div>
 </div>
 
+<!-- ===================== MODAL EDITAR USUARIO ===================== -->
+<div class="modal-backdrop" id="modalEditarUsuario">
+  <div class="modal">
+    <h3>Editar usuario</h3>
+    <input type="hidden" id="editUsuarioId">
+
+    <label>Usuario</label>
+    <p id="editUsuarioUsername" style="font-weight:700;color:#555;margin:2px 0 10px;"></p>
+
+    <label>Nombre completo</label>
+    <input type="text" id="editUsuarioNombre">
+    <button class="btn btn-secondary" style="margin-top:10px;" onclick="guardarNombreUsuario()">Guardar nombre</button>
+
+    <hr style="margin:18px 0;border:none;border-top:1px dashed #ddd;">
+
+    <label>Restablecer contraseña</label>
+    <input type="text" id="editUsuarioPassword" placeholder="Nueva contraseña (mínimo 6 caracteres)">
+    <button class="btn btn-secondary" style="margin-top:10px;" onclick="restablecerPasswordUsuario()">Restablecer contraseña</button>
+
+    <p class="status-msg" id="editUsuarioStatus"></p>
+    <div class="modal-actions">
+      <button class="btn icon-btn" style="flex:1;" onclick="cerrarModalUsuario()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="assets/supabase-client.js"></script>
 <script src="assets/pricing.js"></script>
@@ -638,6 +664,8 @@
       return;
     }
 
+    window.__usuariosCache = data;
+
     const filas = data.map(u => `
       <tr>
         <td>${u.nombre_completo}<br><span style="color:#999;font-size:.75rem;">@${u.username}</span></td>
@@ -647,15 +675,95 @@
             ${u.activo ? "Activo" : "Bloqueado"}
           </button>
         </td>
+        <td><button class="icon-btn" onclick="abrirEdicionUsuario('${u.id}')">Editar</button></td>
       </tr>
     `).join("");
 
     wrap.innerHTML = `
       <table class="orders">
-        <thead><tr><th>Nombre</th><th>Rol</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr></thead>
         <tbody>${filas}</tbody>
       </table>
     `;
+  }
+
+  function abrirEdicionUsuario(id) {
+    const u = (window.__usuariosCache || []).find(x => x.id === id);
+    if (!u) return;
+    document.getElementById("editUsuarioId").value = u.id;
+    document.getElementById("editUsuarioUsername").textContent = "@" + u.username;
+    document.getElementById("editUsuarioNombre").value = u.nombre_completo;
+    document.getElementById("editUsuarioPassword").value = "";
+    document.getElementById("editUsuarioStatus").textContent = "";
+    document.getElementById("editUsuarioStatus").className = "status-msg";
+    document.getElementById("modalEditarUsuario").classList.add("open");
+  }
+
+  function cerrarModalUsuario() {
+    document.getElementById("modalEditarUsuario").classList.remove("open");
+  }
+
+  async function guardarNombreUsuario() {
+    const id = document.getElementById("editUsuarioId").value;
+    const nombre_completo = document.getElementById("editUsuarioNombre").value.trim();
+    const status = document.getElementById("editUsuarioStatus");
+    status.className = "status-msg";
+
+    if (!nombre_completo) {
+      status.classList.add("error");
+      status.textContent = "El nombre no puede quedar vacío.";
+      return;
+    }
+
+    const { error } = await supa.from("perfiles").update({ nombre_completo }).eq("id", id);
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo guardar el nombre: " + error.message;
+      return;
+    }
+
+    status.classList.add("ok");
+    status.textContent = "Nombre actualizado.";
+    cargarUsuarios();
+    cargarVendedoresParaFiltro();
+  }
+
+  async function restablecerPasswordUsuario() {
+    const id = document.getElementById("editUsuarioId").value;
+    const nuevaPassword = document.getElementById("editUsuarioPassword").value;
+    const status = document.getElementById("editUsuarioStatus");
+    status.className = "status-msg";
+
+    if (!nuevaPassword || nuevaPassword.length < 6) {
+      status.classList.add("error");
+      status.textContent = "Escribe una contraseña nueva de al menos 6 caracteres.";
+      return;
+    }
+
+    const { data: sessionData } = await supa.auth.getSession();
+    const token = sessionData?.session?.access_token;
+
+    try {
+      const resp = await fetch("/api/admin-reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ userId: id, nuevaPassword })
+      });
+      const result = await resp.json();
+
+      if (!resp.ok) {
+        status.classList.add("error");
+        status.textContent = result.error || "No se pudo restablecer la contraseña.";
+        return;
+      }
+
+      status.classList.add("ok");
+      status.textContent = "Contraseña restablecida correctamente.";
+      document.getElementById("editUsuarioPassword").value = "";
+    } catch (e) {
+      status.classList.add("error");
+      status.textContent = "No se pudo contactar al servidor.";
+    }
   }
 
   async function toggleUsuario(id, activo) {
