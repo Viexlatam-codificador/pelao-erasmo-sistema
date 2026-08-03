@@ -4,6 +4,52 @@ Este archivo es un resumen del proyecto para que una sesión nueva de Claude
 Code (u otro desarrollador) pueda continuar sin perder contexto. Léelo
 completo antes de tocar código.
 
+## 🔴 Pendiente urgente: falta correr una migración SQL
+
+El código para sábado/domingo como día de reparto y para fijar manualmente
+el día de un pedido (entregas especiales) **ya está desplegado**, pero
+necesita un cambio en la base de datos que el cliente todavía no ha
+corrido. Sin esto, elegir "Sábado" o "Domingo" en una comuna, o fijar un
+día a mano en un pedido, va a fallar con un error de la base de datos.
+
+**Correr esto una sola vez en Supabase → SQL Editor → Run** (mismo lugar
+de siempre):
+
+```sql
+alter table public.comunas_rutas drop constraint if exists comunas_rutas_dia_reparto_check;
+alter table public.comunas_rutas add constraint comunas_rutas_dia_reparto_check
+  check (dia_reparto in ('lunes','martes','miercoles','jueves','viernes','sabado','domingo'));
+
+alter table public.pedidos add column if not exists dia_reparto_manual boolean not null default false;
+
+create or replace function public.asignar_dia_reparto()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.dia_reparto_manual then
+    new.actualizado_en := now();
+    return new;
+  end if;
+
+  select cr.dia_reparto into new.dia_reparto
+  from public.comunas_rutas cr
+  where cr.comuna_normalizada = public.f_unaccent(lower(trim(new.comuna)))
+    and cr.activa = true;
+
+  if new.dia_reparto is null then
+    new.dia_reparto := 'sin_asignar';
+  end if;
+
+  new.actualizado_en := now();
+  return new;
+end;
+$$;
+```
+
+Ya está agregado también al final de `schema.sql` (por si se recrea el
+proyecto desde cero alguna vez, no hay que aplicar esto aparte).
+
 ## ✅ Estado al 2026-08-03: sistema completo funcionando en producción
 
 Todo lo pendiente de la sesión anterior quedó resuelto y **verificado de
@@ -93,6 +139,44 @@ también se probó en `index.html` real con una comuna de la base de datos
 vendedor carga los nombres reales (incluyendo el rename de "Vendedor 1" a
 un nombre propio, hecho con la función de editar usuario). Sin errores de
 consola en ningún caso.
+
+### Ronda 3 de features (mismo día, pedido explícito del cliente)
+
+1. **Sábado y domingo como día de reparto** — para entregas especiales.
+   Requiere la migración SQL de la sección roja al principio de este
+   archivo (todavía no corrida).
+2. **Fijar manualmente el día de un pedido individual** — en el modal de
+   editar pedido, campo "Día de reparto" con opción "Automático (según
+   comuna)" o un día fijo. Al fijarlo a mano, `dia_reparto_manual = true`
+   y el trigger de la base de datos deja de recalcularlo automáticamente
+   cuando se edite la comuna del pedido. Requiere la misma migración SQL.
+3. **"IV Región"** agregada como opción al crear una comuna nueva en la
+   pestaña Comunas/Rutas (sin migración — la columna `region` siempre fue
+   texto libre). **Nota de alcance**: esto es solo para la gestión interna
+   de rutas; el cotizador público (`index.html`) sigue teniendo tramos de
+   precio únicamente para Región Metropolitana y V Región — agregar
+   precios para IV Región es una decisión de negocio (tramos y precios)
+   que no estaba especificada, así que no se tocó `pricing.js`. Avisar si
+   se necesita.
+4. **Exportar a Excel** (pestaña Pedidos → botón "📊 Exportar Excel") — usa
+   SheetJS (CDN) para generar un `.xlsx` con el detalle de los pedidos
+   filtrados actualmente, agrupado y ordenado por vendedor y luego fecha
+   — pensado como histórico de ventas por vendedor a lo largo de la
+   temporada. Probado: corre sin lanzar excepciones con datos de prueba.
+5. **Bug corregido**: "Imprimir ruta" imprimía con los pedidos ya cargados
+   en pantalla, no con el filtro recién elegido — si el admin cambiaba
+   "Todos los días" a un día específico pero no le daba clic a "Filtrar"
+   antes de imprimir, salían pedidos de todos los días. Ahora tanto
+   "Imprimir ruta" como "Exportar Excel" recargan automáticamente con los
+   filtros actuales antes de generar el archivo. Verificado: se confirmó
+   que el cache queda con solo los pedidos del día filtrado.
+
+Todo lo de esta ronda se probó en el mock local (sin errores de consola,
+lógica de filtro/día-manual confirmada con `javascript_tool`) y ya está
+desplegado en Vercel. **Falta que el cliente corra la migración SQL** de
+arriba para que sábado/domingo y el día manual funcionen contra la base de
+datos real — sin eso, esas dos funciones específicas van a fallar con un
+error de la base de datos (el resto del sistema sigue funcionando igual).
 
 ## Objetivo
 

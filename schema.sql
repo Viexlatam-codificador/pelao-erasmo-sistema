@@ -84,7 +84,7 @@ create table public.comunas_rutas (
   comuna text not null unique,
   comuna_normalizada text generated always as (f_unaccent(lower(trim(comuna)))) stored,
   region text not null default 'Región Metropolitana',
-  dia_reparto text check (dia_reparto in ('lunes','martes','miercoles','jueves','viernes')),
+  dia_reparto text check (dia_reparto in ('lunes','martes','miercoles','jueves','viernes','sabado','domingo')),
   activa boolean not null default true,
   actualizado_en timestamptz not null default now()
 );
@@ -169,6 +169,7 @@ create table public.pedidos (
   estado text not null default 'pendiente'
     check (estado in ('pendiente','preparacion','listo_despacho','en_ruta','entregado','anulado')),
   dia_reparto text,
+  dia_reparto_manual boolean not null default false,
   vendedor_id uuid not null references public.perfiles(id),
   creado_por uuid not null references public.perfiles(id) default auth.uid(),
   creado_en timestamptz not null default now(),
@@ -182,12 +183,19 @@ create index pedidos_dia_reparto_idx on public.pedidos (dia_reparto, fecha);
 create index pedidos_estado_idx on public.pedidos (estado);
 create index pedidos_comuna_idx on public.pedidos (comuna_normalizada);
 
--- Asigna automáticamente el día de reparto según la comuna (o 'sin_asignar')
+-- Asigna automáticamente el día de reparto según la comuna (o 'sin_asignar').
+-- Si dia_reparto_manual = true, el admin fijó el día a mano (caso especial,
+-- por ejemplo una entrega en fin de semana) y este trigger no lo toca.
 create or replace function public.asignar_dia_reparto()
 returns trigger
 language plpgsql
 as $$
 begin
+  if new.dia_reparto_manual then
+    new.actualizado_en := now();
+    return new;
+  end if;
+
   select cr.dia_reparto into new.dia_reparto
   from public.comunas_rutas cr
   where cr.comuna_normalizada = public.f_unaccent(lower(trim(new.comuna)))

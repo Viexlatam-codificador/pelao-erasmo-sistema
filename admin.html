@@ -77,6 +77,8 @@
           <option value="miercoles">Miércoles</option>
           <option value="jueves">Jueves</option>
           <option value="viernes">Viernes</option>
+          <option value="sabado">Sábado</option>
+          <option value="domingo">Domingo</option>
           <option value="sin_asignar">Sin asignar</option>
         </select>
         <input type="text" id="filtroComuna" placeholder="Filtrar por comuna...">
@@ -85,6 +87,7 @@
         </select>
         <button class="icon-btn" onclick="cargarPedidos()">Filtrar</button>
         <button class="icon-btn" onclick="imprimirRuta()">🖨️ Imprimir ruta</button>
+        <button class="icon-btn" onclick="exportarExcel()">📊 Exportar Excel</button>
       </div>
       <p style="font-size:.78rem;color:#888;margin:-6px 0 14px;">
         Consejo: elige un día en "Todos los días" antes de imprimir, para que la ruta sea solo de ese día.
@@ -116,6 +119,7 @@
           <label>Región</label>
           <select id="nuevaRegion">
             <option value="Región Metropolitana">Región Metropolitana</option>
+            <option value="IV Región">IV Región</option>
             <option value="V Región">V Región</option>
           </select>
         </div>
@@ -127,6 +131,8 @@
             <option value="miercoles">Miércoles</option>
             <option value="jueves">Jueves</option>
             <option value="viernes">Viernes</option>
+            <option value="sabado">Sábado (entrega especial)</option>
+            <option value="domingo">Domingo (entrega especial)</option>
           </select>
         </div>
       </div>
@@ -196,6 +202,18 @@
       <option value="entregado">Entregado</option>
       <option value="anulado">Anulado</option>
     </select>
+    <label>Día de reparto</label>
+    <select id="editDiaReparto">
+      <option value="auto">Automático (según comuna)</option>
+      <option value="lunes">Lunes (fijado a mano)</option>
+      <option value="martes">Martes (fijado a mano)</option>
+      <option value="miercoles">Miércoles (fijado a mano)</option>
+      <option value="jueves">Jueves (fijado a mano)</option>
+      <option value="viernes">Viernes (fijado a mano)</option>
+      <option value="sabado">Sábado (fijado a mano)</option>
+      <option value="domingo">Domingo (fijado a mano)</option>
+    </select>
+    <p style="font-size:.78rem;color:#888;margin:2px 0 0;">Usa esto solo para casos especiales (ej: entrega de fin de semana). "Automático" vuelve a asignar el día según la comuna.</p>
     <label>Observaciones</label>
     <textarea id="editObservaciones"></textarea>
 
@@ -234,6 +252,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="assets/supabase-client.js"></script>
 <script src="assets/pricing.js"></script>
 <script src="assets/auth-guard.js"></script>
@@ -248,7 +267,8 @@
   };
   const DIA_LABEL = {
     lunes: "Lunes", martes: "Martes", miercoles: "Miércoles",
-    jueves: "Jueves", viernes: "Viernes", sin_asignar: "Sin asignar"
+    jueves: "Jueves", viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
+    sin_asignar: "Sin asignar"
   };
 
   let perfilActual = null;
@@ -360,7 +380,7 @@
 
     let query = supa
       .from("pedidos")
-      .select("id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, dia_reparto, cantidad_pipeno, cantidad_granadina, forma_pago, total, estado, observaciones, vendedor_id")
+      .select("id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, dia_reparto, dia_reparto_manual, cantidad_pipeno, cantidad_granadina, forma_pago, total, estado, observaciones, vendedor_id")
       .order("creado_en", { ascending: false })
       .limit(200);
 
@@ -416,7 +436,11 @@
     `;
   }
 
-  function imprimirRuta() {
+  async function imprimirRuta() {
+    // Siempre recarga con los filtros actuales antes de imprimir — si no,
+    // se podía imprimir con datos viejos si el admin cambiaba el filtro de
+    // día y olvidaba tocar "Filtrar" primero.
+    await cargarPedidos();
     const todos = window.__pedidosCache || [];
     const pedidosRuta = todos
       .filter(p => p.estado !== "anulado" && p.estado !== "entregado")
@@ -490,6 +514,58 @@
     ventana.print();
   }
 
+  async function exportarExcel() {
+    // Igual que Imprimir ruta: recarga con los filtros actuales antes de
+    // exportar, para no dejar la misma trampa (exportar datos viejos si el
+    // admin cambió un filtro y no le dio clic a "Filtrar").
+    await cargarPedidos();
+    const todos = window.__pedidosCache || [];
+
+    if (todos.length === 0) {
+      alert("No hay pedidos para exportar con los filtros actuales.");
+      return;
+    }
+
+    // Histórico de ventas por vendedor: agrupado por vendedor, y dentro de
+    // cada vendedor ordenado por fecha — así queda listo para revisar el
+    // desempeño de cada uno a lo largo de la temporada.
+    const filas = [...todos]
+      .sort((a, b) => {
+        const vendCmp = vendedorNombre(a.vendedor_id).localeCompare(vendedorNombre(b.vendedor_id), "es");
+        if (vendCmp !== 0) return vendCmp;
+        return (a.fecha || "").localeCompare(b.fecha || "");
+      })
+      .map(p => ({
+        Vendedor: vendedorNombre(p.vendedor_id),
+        Fecha: p.fecha,
+        Cliente: p.nombre_cliente,
+        Teléfono: p.telefono,
+        Dirección: `${p.direccion}${p.numero ? " " + p.numero : ""}${p.departamento ? ", depto " + p.departamento : ""}`,
+        Comuna: p.comuna,
+        Región: p.region,
+        "Día ruta": DIA_LABEL[p.dia_reparto] || p.dia_reparto || "",
+        "Pipeño (bidones)": p.cantidad_pipeno || 0,
+        "Granadina (displays)": p.cantidad_granadina || 0,
+        Total: p.total,
+        "Forma de pago": p.forma_pago,
+        Estado: ESTADO_LABEL[p.estado] || p.estado,
+        Observaciones: p.observaciones || ""
+      }));
+
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    hoja["!cols"] = [
+      { wch: 16 }, { wch: 11 }, { wch: 20 }, { wch: 13 }, { wch: 28 }, { wch: 14 },
+      { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 10 }, { wch: 20 },
+      { wch: 12 }, { wch: 24 }
+    ];
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Ventas");
+
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(libro, `ventas-pelao-erasmo-${hoy}.xlsx`);
+  }
+
   async function cambiarEstado(id, nuevoEstado) {
     const { error } = await supa.from("pedidos").update({ estado: nuevoEstado }).eq("id", id);
     if (error) {
@@ -526,6 +602,7 @@
     document.getElementById("editGranadina").value = p.cantidad_granadina;
     document.getElementById("editFormaPago").value = p.forma_pago;
     document.getElementById("editEstado").value = p.estado;
+    document.getElementById("editDiaReparto").value = p.dia_reparto_manual ? p.dia_reparto : "auto";
     document.getElementById("editObservaciones").value = p.observaciones || "";
     document.getElementById("editStatus").textContent = "";
     document.getElementById("editStatus").className = "status-msg";
@@ -547,6 +624,9 @@
     const regionKey = p ? regionKeyFromLabel(p.region) : "rm";
     const resultado = calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPrecioDespacho: 0 });
 
+    const diaSeleccionado = document.getElementById("editDiaReparto").value;
+    const esManual = diaSeleccionado !== "auto";
+
     const { error } = await supa.from("pedidos").update({
       nombre_cliente: document.getElementById("editNombreCliente").value.trim(),
       telefono: document.getElementById("editTelefono").value.trim(),
@@ -560,7 +640,9 @@
       forma_pago: document.getElementById("editFormaPago").value,
       estado: document.getElementById("editEstado").value,
       observaciones: document.getElementById("editObservaciones").value.trim() || null,
-      total: resultado.total
+      total: resultado.total,
+      dia_reparto_manual: esManual,
+      dia_reparto: esManual ? diaSeleccionado : p.dia_reparto
     }).eq("id", id);
 
     if (error) {
@@ -599,6 +681,8 @@
             <option value="miercoles" ${c.dia_reparto === "miercoles" ? "selected" : ""}>Miércoles</option>
             <option value="jueves" ${c.dia_reparto === "jueves" ? "selected" : ""}>Jueves</option>
             <option value="viernes" ${c.dia_reparto === "viernes" ? "selected" : ""}>Viernes</option>
+            <option value="sabado" ${c.dia_reparto === "sabado" ? "selected" : ""}>Sábado</option>
+            <option value="domingo" ${c.dia_reparto === "domingo" ? "selected" : ""}>Domingo</option>
           </select>
         </td>
         <td>

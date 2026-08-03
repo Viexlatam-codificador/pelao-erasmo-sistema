@@ -509,7 +509,7 @@ function normalize(str){
 // Comuna -> día de reparto, cargado desde el sistema (admin.html lo administra
 // en la pestaña "Comunas / Rutas"). Si cambia allá, se refleja acá solo con
 // recargar la página — no hay nada hardcodeado.
-const DIA_LABEL_PUBLICO = { lunes:"lunes", martes:"martes", miercoles:"miércoles", jueves:"jueves", viernes:"viernes" };
+const DIA_LABEL_PUBLICO = { lunes:"lunes", martes:"martes", miercoles:"miércoles", jueves:"jueves", viernes:"viernes", sabado:"sábado", domingo:"domingo" };
 let COMUNAS_DIA = {};
 
 async function cargarComunasPublicas(){
