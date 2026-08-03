@@ -31,6 +31,7 @@ const DOMINIO_INTERNO = "pelaoerasmo.internal";
 
 const CUENTAS = [
   { username: "pedidos-web", nombre_completo: "Pedidos Web (formulario público)", rol: "vendedor", esSistema: true },
+  { username: "admin", nombre_completo: "Administrador", rol: "admin" },
   { username: "vendedor1", nombre_completo: "Vendedor 1", rol: "vendedor" },
   { username: "vendedor2", nombre_completo: "Vendedor 2", rol: "vendedor" },
   { username: "vendedor3", nombre_completo: "Vendedor 3", rol: "vendedor" }
@@ -98,9 +99,9 @@ async function main() {
   if (resumen.length) {
     console.log("\n=== Anota estas contraseñas ahora — no se muestran de nuevo ===");
     resumen.forEach(r => console.log(`  usuario: ${r.username}   contraseña: ${r.password}`));
-    console.log("Pídeles a los vendedores que la cambien la primera vez que puedan (por ahora el sistema no tiene un flujo de 'cambiar mi contraseña'; si lo necesitas, avísame y lo agrego).");
+    console.log("Pídeles a los vendedores (y a quien use la cuenta admin) que la cambien la primera vez que puedan (por ahora el sistema no tiene un flujo de 'cambiar mi contraseña'; si lo necesitas, avísame y lo agrego).");
   } else {
-    console.log("\nNo se crearon vendedores nuevos (ya existían todos).");
+    console.log("\nNo se crearon cuentas nuevas (ya existían todas).");
   }
 }
 
