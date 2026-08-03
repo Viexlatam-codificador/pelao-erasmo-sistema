@@ -144,15 +144,33 @@ chat. Confirmar si ya lo hizo.
 
 ## Despliegue
 
-Todavía NO está en GitHub ni en Vercel. Con Claude Code corriendo en la
-máquina del cliente (con red real, git real, npm real), esto ya se puede
-hacer directo:
-- `git init`, commit, `gh repo create` (o crear el repo manualmente y hacer
-  `git remote add` + `git push`).
-- Conectar el repo a Vercel (`vercel link` + `vercel deploy`, o import desde
-  el dashboard de Vercel).
-- Las variables de entorno de Vercel (cuando se necesiten, para `/api`) se
-  configuran desde el dashboard de Vercel, nunca committeadas.
+**✅ Ya está en GitHub y en Vercel, en producción.**
+
+- **GitHub**: https://github.com/Viexlatam-codificador/pelao-erasmo-sistema
+  (repo público, cuenta `Viexlatam-codificador`). `gh` se instaló localmente
+  en `~/.local/bin/gh` (no vía Homebrew, que no está instalado en esta Mac).
+- **Vercel**: https://pelao-erasmo-sistema.vercel.app (proyecto
+  `viex-s-projects/pelao-erasmo-sistema`). El repo de GitHub quedó conectado
+  automáticamente, así que **cada push a `main` dispara un deploy nuevo**.
+  Verificado en navegador: `login.html` carga bien, sin errores de consola.
+- El proyecto no tiene `vercel.json`: es un sitio estático en la raíz + una
+  función serverless en `/api`, que Vercel detecta automáticamente.
+  `package.json` declara `@supabase/supabase-js` como dependencia para que
+  la función la tenga disponible (se instaló sola en el build).
+
+### ⚠️ Pendiente para que el panel admin funcione al 100%
+
+Falta configurar en el dashboard de Vercel (Project → Settings →
+Environment Variables) la variable **`SUPABASE_SERVICE_ROLE_KEY`** con la
+clave secreta que el cliente tiene guardada aparte. Sin esto:
+- Todo el sitio funciona igual (landing, login, vendedor, y el panel admin
+  en sus pestañas de Resumen/Pedidos/Comunas).
+- Solo falla "Crear vendedor" en la pestaña Usuarios de `admin.html`, con un
+  error explícito ("Falta configurar SUPABASE_SERVICE_ROLE_KEY en Vercel"),
+  no en silencio.
+Claude no debe pedir ni manejar esa clave directamente — el cliente debe
+pegarla él mismo en el dashboard de Vercel, y luego redesplegar (o esperar
+al próximo push).
 
 ## Estilo de trabajo que pidió el cliente
 
