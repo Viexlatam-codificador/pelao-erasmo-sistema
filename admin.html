@@ -135,6 +135,10 @@
             <option value="domingo">Domingo (entrega especial)</option>
           </select>
         </div>
+        <div style="flex:1;min-width:130px;">
+          <label>Precio despacho ($)</label>
+          <input type="number" id="nuevoPrecioDespacho" min="0" step="100" value="0">
+        </div>
       </div>
       <button class="btn btn-secondary" style="margin-top:14px;" onclick="agregarComuna()">Agregar comuna</button>
       <p class="status-msg" id="comunaStatus"></p>
@@ -670,7 +674,7 @@
     const wrap = document.getElementById("comunasWrap");
     const { data, error } = await supa
       .from("comunas_rutas")
-      .select("id, comuna, region, dia_reparto, activa")
+      .select("id, comuna, region, dia_reparto, precio_despacho, activa")
       .order("region")
       .order("comuna");
 
@@ -695,6 +699,10 @@
           </select>
         </td>
         <td>
+          <input type="number" min="0" step="100" value="${c.precio_despacho || 0}" style="width:100px;"
+            onchange="actualizarComuna('${c.id}', { precio_despacho: parseInt(this.value, 10) || 0 })">
+        </td>
+        <td>
           <button class="toggle-activo ${c.activa ? "si" : "no"}" onclick="actualizarComuna('${c.id}', { activa: ${!c.activa} })">
             ${c.activa ? "Activa" : "Inactiva"}
           </button>
@@ -704,7 +712,7 @@
 
     wrap.innerHTML = `
       <table class="orders">
-        <thead><tr><th>Comuna</th><th>Región</th><th>Día reparto</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Comuna</th><th>Región</th><th>Día reparto</th><th>Despacho ($)</th><th>Estado</th></tr></thead>
         <tbody>${filas}</tbody>
       </table>
     `;
@@ -724,6 +732,7 @@
     const comuna = document.getElementById("nuevaComuna").value.trim();
     const region = document.getElementById("nuevaRegion").value;
     const dia_reparto = document.getElementById("nuevoDia").value;
+    const precio_despacho = parseInt(document.getElementById("nuevoPrecioDespacho").value, 10) || 0;
 
     if (!comuna) {
       status.classList.add("error");
@@ -731,7 +740,7 @@
       return;
     }
 
-    const { error } = await supa.from("comunas_rutas").insert({ comuna, region, dia_reparto });
+    const { error } = await supa.from("comunas_rutas").insert({ comuna, region, dia_reparto, precio_despacho });
     if (error) {
       status.classList.add("error");
       status.textContent = "No se pudo agregar: " + error.message;

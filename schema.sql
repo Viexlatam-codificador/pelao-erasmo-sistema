@@ -85,6 +85,7 @@ create table public.comunas_rutas (
   comuna_normalizada text generated always as (f_unaccent(lower(trim(comuna)))) stored,
   region text not null default 'Región Metropolitana',
   dia_reparto text check (dia_reparto in ('lunes','martes','miercoles','jueves','viernes','sabado','domingo')),
+  precio_despacho integer not null default 0 check (precio_despacho >= 0),
   activa boolean not null default true,
   actualizado_en timestamptz not null default now()
 );

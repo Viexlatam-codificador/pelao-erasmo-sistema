@@ -1,12 +1,14 @@
 // ============================================================================
 // El Pelao Erasmo — Endpoint público (sin login) para mostrarle al cliente
-// el día de reparto de su comuna en index.html.
+// el día de reparto y el precio de despacho de su comuna en index.html.
 //
 // comunas_rutas no tiene una política de RLS que permita leerla sin sesión
 // (solo "authenticated"), así que este endpoint usa la clave secreta para
-// leerla del lado del servidor y expone únicamente comuna/región/día — nada
-// sensible, es la misma información que ya se le muestra al cliente en la
-// landing.
+// leerla del lado del servidor y expone únicamente comuna/región/día/precio
+// de despacho — nada sensible, es la misma información que ya se le
+// muestra al cliente en la landing. El precio de despacho lo administra el
+// admin en la pestaña Comunas/Rutas y no afecta el total que se guarda en
+// la base de datos (eso sigue siendo solo producto, igual que siempre).
 // ============================================================================
 
 const { createClient } = require("@supabase/supabase-js");
@@ -29,7 +31,7 @@ module.exports = async function handler(req, res) {
 
   const { data, error } = await supaAdmin
     .from("comunas_rutas")
-    .select("comuna, region, dia_reparto")
+    .select("comuna, region, dia_reparto, precio_despacho")
     .eq("activa", true)
     .order("comuna");
 

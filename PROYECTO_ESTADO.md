@@ -4,47 +4,21 @@ Este archivo es un resumen del proyecto para que una sesión nueva de Claude
 Code (u otro desarrollador) pueda continuar sin perder contexto. Léelo
 completo antes de tocar código.
 
-## 🔴 Pendiente urgente: falta correr una migración SQL
+## 🔴 Pendiente urgente: falta correr una migración SQL (precio de despacho)
 
-El código para sábado/domingo como día de reparto y para fijar manualmente
-el día de un pedido (entregas especiales) **ya está desplegado**, pero
-necesita un cambio en la base de datos que el cliente todavía no ha
-corrido. Sin esto, elegir "Sábado" o "Domingo" en una comuna, o fijar un
-día a mano en un pedido, va a fallar con un error de la base de datos.
+✅ La migración anterior (sábado/domingo + día manual) **ya se corrió** —
+confirmado, `pedidos.dia_reparto_manual` existe y "Todos los pedidos" ya
+carga bien.
 
-**Correr esto una sola vez en Supabase → SQL Editor → Run** (mismo lugar
-de siempre):
+Ahora falta una migración nueva y chica para el **precio de despacho por
+comuna** (columna `comunas_rutas.precio_despacho`, ya en el código pero no
+en la base de datos todavía). Sin esto, la pestaña Comunas/Rutas va a fallar
+al intentar guardar o mostrar el precio de despacho.
+
+**Correr esto una sola vez en Supabase → SQL Editor → Run**:
 
 ```sql
-alter table public.comunas_rutas drop constraint if exists comunas_rutas_dia_reparto_check;
-alter table public.comunas_rutas add constraint comunas_rutas_dia_reparto_check
-  check (dia_reparto in ('lunes','martes','miercoles','jueves','viernes','sabado','domingo'));
-
-alter table public.pedidos add column if not exists dia_reparto_manual boolean not null default false;
-
-create or replace function public.asignar_dia_reparto()
-returns trigger
-language plpgsql
-as $$
-begin
-  if new.dia_reparto_manual then
-    new.actualizado_en := now();
-    return new;
-  end if;
-
-  select cr.dia_reparto into new.dia_reparto
-  from public.comunas_rutas cr
-  where cr.comuna_normalizada = public.f_unaccent(lower(trim(new.comuna)))
-    and cr.activa = true;
-
-  if new.dia_reparto is null then
-    new.dia_reparto := 'sin_asignar';
-  end if;
-
-  new.actualizado_en := now();
-  return new;
-end;
-$$;
+alter table public.comunas_rutas add column if not exists precio_despacho integer not null default 0 check (precio_despacho >= 0);
 ```
 
 Ya está agregado también al final de `schema.sql` (por si se recrea el
@@ -143,13 +117,12 @@ consola en ningún caso.
 ### Ronda 3 de features (mismo día, pedido explícito del cliente)
 
 1. **Sábado y domingo como día de reparto** — para entregas especiales.
-   Requiere la migración SQL de la sección roja al principio de este
-   archivo (todavía no corrida).
+   ✅ Migración corrida y verificada.
 2. **Fijar manualmente el día de un pedido individual** — en el modal de
    editar pedido, campo "Día de reparto" con opción "Automático (según
    comuna)" o un día fijo. Al fijarlo a mano, `dia_reparto_manual = true`
    y el trigger de la base de datos deja de recalcularlo automáticamente
-   cuando se edite la comuna del pedido. Requiere la misma migración SQL.
+   cuando se edite la comuna del pedido. ✅ Migración corrida y verificada.
 3. **"IV Región"** agregada como opción al crear una comuna nueva en la
    pestaña Comunas/Rutas (sin migración — la columna `region` siempre fue
    texto libre). **Nota de alcance**: esto es solo para la gestión interna
@@ -171,12 +144,35 @@ consola en ningún caso.
    filtros actuales antes de generar el archivo. Verificado: se confirmó
    que el cache queda con solo los pedidos del día filtrado.
 
-Todo lo de esta ronda se probó en el mock local (sin errores de consola,
-lógica de filtro/día-manual confirmada con `javascript_tool`) y ya está
-desplegado en Vercel. **Falta que el cliente corra la migración SQL** de
-arriba para que sábado/domingo y el día manual funcionen contra la base de
-datos real — sin eso, esas dos funciones específicas van a fallar con un
-error de la base de datos (el resto del sistema sigue funcionando igual).
+Todo lo de esta ronda se probó en el mock local y **ya está verificado en
+producción real** (el cliente corrió la migración y confirmamos que
+"Todos los pedidos" carga bien).
+
+### Ronda 4 (mismo día): corregir región + precio de despacho por comuna
+
+1. **Corregir región en el modal de editar pedido** — antes solo se podía
+   corregir la comuna; si el vendedor también se equivocaba de región, el
+   total no se recalculaba con el tramo de precio correcto (RM y V Región
+   tienen tablas distintas). Ahora hay un select de Región en el modal, y
+   el total se recalcula según la región corregida. Probado con el mock:
+   cambiar comuna a "Valparaíso" + región a "V Región" recalculó el precio
+   unitario al tramo correcto de V Región.
+2. **Precio de despacho editable por comuna** (columna nueva
+   `comunas_rutas.precio_despacho`) — el admin lo edita en la pestaña
+   Comunas/Rutas (columna "Despacho ($)"), y `index.html` lo muestra al
+   cliente en vivo al escribir su comuna ("Despacho a Providencia:
+   $3.500"), leyendo desde `api/comunas-publicas.js` (ya existía, se le
+   agregó este campo). Si una comuna no tiene precio cargado (0), se
+   muestra un valor referencial como antes ("a confirmar"). **No afecta a
+   los vendedores**: `vendedor.html` y el total que se guarda en la base de
+   datos siguen siendo solo de producto, exactamente igual que antes — el
+   despacho es puramente informativo para el cliente en la landing
+   pública. Probado con mock: precio configurado se muestra y se suma al
+   total en vivo; sin configurar muestra el mensaje referencial; ambos
+   casos verificados sin errores de consola.
+
+**Requiere una migración SQL nueva** (ver sección roja al principio de
+este archivo) — todavía no corrida por el cliente.
 
 ## Objetivo
 

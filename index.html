@@ -485,13 +485,10 @@ const PRICING = {
 };
 const GRANADINA_PRICE = 22000;
 
-// Precio de despacho por comuna (Región Metropolitana). Se puede ir
-// completando cuando llegue la tabla real de despacho por comuna.
-// Formato: "nombre comuna en minúsculas sin tildes": precio
-const COMUNA_DELIVERY = {
-  // "providencia": 3000,
-  // "las condes": 3500,
-};
+// Precio de despacho por comuna: lo administra el admin en la pestaña
+// Comunas/Rutas (columna "Despacho ($)") y se carga en vivo más abajo, en
+// cargarComunasPublicas() — nada hardcodeado acá. Si una comuna todavía no
+// tiene precio cargado (0 o no encontrada), se muestra un valor referencial.
 const DEFAULT_DELIVERY_RM = 3000;
 
 const FLYERS = {
@@ -511,6 +508,7 @@ function normalize(str){
 // recargar la página — no hay nada hardcodeado.
 const DIA_LABEL_PUBLICO = { lunes:"lunes", martes:"martes", miercoles:"miércoles", jueves:"jueves", viernes:"viernes", sabado:"sábado", domingo:"domingo" };
 let COMUNAS_DIA = {};
+let COMUNAS_DESPACHO = {};
 
 async function cargarComunasPublicas(){
   try{
@@ -520,10 +518,12 @@ async function cargarComunasPublicas(){
     const lista = document.getElementById("comunaList");
     data.forEach(c=>{
       COMUNAS_DIA[normalize(c.comuna)] = c.dia_reparto;
+      COMUNAS_DESPACHO[normalize(c.comuna)] = c.precio_despacho || 0;
       const opt = document.createElement("option");
       opt.value = c.comuna;
       lista.appendChild(opt);
     });
+    updateAll();
   }catch(e){ /* si falla, el formulario sigue funcionando igual, solo sin este dato extra */ }
 }
 
@@ -625,8 +625,9 @@ function updateAll(){
   let deliveryPrice = null;
   let deliveryText = "";
   if(currentRegion === "rm"){
-    if(comunaKey && COMUNA_DELIVERY.hasOwnProperty(comunaKey)){
-      deliveryPrice = COMUNA_DELIVERY[comunaKey];
+    const precioComuna = comunaKey ? COMUNAS_DESPACHO[comunaKey] : undefined;
+    if(comunaKey && precioComuna){
+      deliveryPrice = precioComuna;
       deliveryText = `Despacho a ${comunaRaw}: ${money(deliveryPrice)}`;
     } else if(comunaKey){
       deliveryText = `Despacho referencial: ${money(DEFAULT_DELIVERY_RM)} (a confirmar para ${comunaRaw})`;
@@ -734,8 +735,9 @@ async function submitOrder(){
   let deliveryPrice = 0;
   let deliveryText = "";
   if(currentRegion==="rm"){
-    if(COMUNA_DELIVERY.hasOwnProperty(comunaKey)){
-      deliveryPrice = COMUNA_DELIVERY[comunaKey];
+    const precioComuna = COMUNAS_DESPACHO[comunaKey];
+    if(precioComuna){
+      deliveryPrice = precioComuna;
       deliveryText = `Despacho a ${comuna}: ${money(deliveryPrice)}`;
     } else {
       deliveryText = `Despacho referencial: ${money(DEFAULT_DELIVERY_RM)} (a confirmar)`;
