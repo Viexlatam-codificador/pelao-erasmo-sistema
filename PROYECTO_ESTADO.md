@@ -4,6 +4,38 @@ Este archivo es un resumen del proyecto para que una sesión nueva de Claude
 Code (u otro desarrollador) pueda continuar sin perder contexto. Léelo
 completo antes de tocar código.
 
+## 🔴 Para leer primero: 3 pendientes de la última sesión
+
+1. **Logo**: el cliente mandó por chat el logo real de "Distribuidora El
+   Pelao Erasmo" (el del oso/bebé con frutos secos y miel), pidiendo
+   agregarlo donde corresponda. **No se pudo guardar como archivo** — Claude
+   no tiene forma de extraer el archivo original de una imagen pegada en el
+   chat, solo de verla. Falta que el cliente deje el archivo en
+   `assets/logo.png` (o le pase la ruta/lo suba a Downloads) para poder
+   agregarlo en `index.html`, `login.html`, y las topbars de `vendedor.html`
+   / `admin.html`.
+2. **Cuentas de vendedores sin crear todavía**: el cliente pidió cuentas
+   `vendedor1`, `vendedor2`, `vendedor3` con clave. Ya existe el script
+   **`scripts/crear-cuentas-iniciales.js`** que las crea (junto con la
+   cuenta de sistema `pedidos-web`, ver punto 3) — pero necesita la clave
+   secreta de Supabase, que Claude nunca debe manejar. Falta que el cliente
+   la corra él mismo:
+   ```
+   npm install
+   SUPABASE_SERVICE_ROLE_KEY="sb_secret_..." node scripts/crear-cuentas-iniciales.js
+   ```
+   El script imprime las contraseñas generadas UNA vez en la terminal —
+   anotarlas ahí, no quedan en ningún archivo.
+3. **Pedidos públicos con registro automático**: se agregó
+   `api/public-order.js` — cuando un cliente hace un pedido en `index.html`,
+   además de abrirse WhatsApp (como ya era), el pedido intenta quedar
+   registrado solo en el sistema (visible en `admin.html`). Para que
+   funcione de verdad hacen falta las **dos cosas de arriba**: la variable
+   `SUPABASE_SERVICE_ROLE_KEY` en Vercel (ver sección Despliegue) y haber
+   corrido el script del punto 2 (crea la cuenta `pedidos-web` a la que
+   quedan asociados estos pedidos). Mientras tanto no rompe nada: si falla,
+   el pedido igual le llega al vendedor por WhatsApp como siempre.
+
 ## Objetivo
 
 Evolucionar la landing de pedidos de Pipeño/Granadina de "El Pelao Erasmo" a
@@ -31,12 +63,24 @@ reflejado en `schema.sql` y en los módulos construidos.
 - El login de administrador/vendedor es un sistema interno, **separado** de
   la landing pública (`index.html`), que NO requiere login y NO se debe
   modificar en su diseño.
+- **Dos perfiles bien separados, confirmado con el cliente**: `index.html`
+  es 100% público (sin login) para que cualquier cliente pida directo por
+  WhatsApp; `login.html` → `vendedor.html`/`admin.html` es el sistema
+  interno con cuenta, solo para el equipo. Nada del sistema interno es
+  accesible sin loguearse (lo hace `assets/auth-guard.js`).
 
 ## Estado actual (lo que YA está hecho y probado)
 
 1. **`index.html`** — landing pública de pedidos (customer-facing). Terminada,
    probada con Playwright, con diseño aprobado por el cliente. **No tocar el
-   diseño sin que el cliente lo pida explícitamente.**
+   diseño sin que el cliente lo pida explícitamente.** El cliente SÍ pidió
+   (en esta última sesión) que el pedido quede registrado automáticamente
+   en el sistema además de ir a WhatsApp — se implementó reemplazando el
+   viejo stub de Formspree (nunca configurado, `TU_ID_AQUI`) por una llamada
+   a `/api/public-order` (no bloqueante: si falla, el flujo de WhatsApp
+   sigue igual que siempre). Probado en navegador: cálculo de precio,
+   resumen y mensaje de éxito funcionan igual que antes; sin errores de
+   consola.
 2. **`schema.sql`** — esquema completo de base de datos. Ya está corrido en el
    proyecto real de Supabase del cliente (org "El Pelao Erasmo", proyecto
    "pelao-erasmo"). Incluye:
@@ -93,7 +137,25 @@ reflejado en `schema.sql` y en los módulos construidos.
    configurada (ver "Despliegue" más abajo).
    Requiere `package.json` con `@supabase/supabase-js` como dependencia
    (agregado).
-7. **`assets/`**:
+7. **`api/public-order.js`** — función serverless pública (sin login) que
+   `index.html` llama al enviar un pedido. Recalcula el precio en el
+   servidor con `assets/pricing.js` (nunca confía en el total que manda el
+   navegador — es un endpoint público, cualquiera podría mandar cualquier
+   cosa), valida los campos, y usa la clave secreta para insertar en
+   `pedidos` con `vendedor_id` apuntando a la cuenta fija `pedidos-web`.
+   Devuelve error explícito si falta `SUPABASE_SERVICE_ROLE_KEY` o si no
+   existe la cuenta `pedidos-web` todavía. Probado con un harness local
+   (mock de `req`/`res`, sin llamar a Supabase real): método no permitido,
+   falta de service key, y validación de campos — los 4 casos devuelven el
+   status/mensaje esperado.
+8. **`scripts/crear-cuentas-iniciales.js`** — script de configuración
+   inicial (correr una sola vez, localmente, con la clave secreta como
+   variable de entorno) que crea la cuenta de sistema `pedidos-web` y las
+   cuentas `vendedor1`/`vendedor2`/`vendedor3`. Idempotente (si una cuenta
+   ya existe, la salta). Imprime las contraseñas generadas solo en la
+   terminal, una vez. Sintaxis verificada con `node --check`; no se pudo
+   probar en vivo porque necesita la clave secreta.
+9. **`assets/`**:
    - `brand.css` — estilos compartidos del sistema interno (misma paleta que
      la landing).
    - `pricing.js` — lógica pura de tramos de precio (testeada con Node

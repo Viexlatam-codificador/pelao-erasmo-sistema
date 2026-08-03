@@ -453,10 +453,9 @@
 // Número de WhatsApp donde llegan los pedidos (sin +, sin espacios)
 const WHATSAPP_NUMBER = "56957248108";
 
-// Endpoint de Formspree para que cada pedido quede guardado automáticamente
-// en un panel/planilla exportable. Reemplaza TU_ID_AQUI por el ID real
-// que te entrega https://formspree.io al crear tu formulario gratis.
-const FORM_ENDPOINT = "https://formspree.io/f/TU_ID_AQUI";
+// Endpoint propio (Vercel) que registra el pedido en el sistema (Supabase)
+// automáticamente, además de abrirse WhatsApp. Vive en /api/public-order.js.
+const FORM_ENDPOINT = "/api/public-order";
 
 // Precios por tramo de cantidad (bidones de 5 Lts), según flyer oficial
 const PRICING = {
@@ -702,25 +701,21 @@ async function submitOrder(){
     pipenoSubtotal, granadinaSubtotal, deliveryText, total, notas
   };
 
-  // Intento de registro automático en planilla (Formspree). Si aún no
-  // configuraste tu FORM_ENDPOINT, este paso simplemente se omite.
-  if(FORM_ENDPOINT.indexOf("TU_ID_AQUI") === -1){
-    try{
-      await fetch(FORM_ENDPOINT, {
-        method: "POST",
-        headers: {"Accept":"application/json","Content-Type":"application/json"},
-        body: JSON.stringify({
-          nombre, telefono, direccion, comuna,
-          region: region.label,
-          cantidad_pipeno: qtyPipeno,
-          precio_unitario_pipeno: unitPrice,
-          cantidad_granadina: qtyGranadina,
-          total_estimado: total,
-          notas
-        })
-      });
-    }catch(e){ /* no bloquea el envío por WhatsApp si falla */ }
-  }
+  // Registro automático del pedido en el sistema (además de WhatsApp). Si
+  // falla por lo que sea, no bloquea el envío por WhatsApp — el pedido de
+  // todas formas le llega al vendedor por ese canal.
+  try{
+    await fetch(FORM_ENDPOINT, {
+      method: "POST",
+      headers: {"Accept":"application/json","Content-Type":"application/json"},
+      body: JSON.stringify({
+        nombre, telefono, direccion, comuna,
+        regionLabel: region.label,
+        qtyPipeno, qtyGranadina,
+        notas
+      })
+    });
+  }catch(e){ /* no bloquea el envío por WhatsApp si falla */ }
 
   const msg = buildMessage(data);
   window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank");
