@@ -184,6 +184,12 @@
     </div>
     <label>Comuna</label>
     <input type="text" id="editComuna">
+    <label>Región</label>
+    <select id="editRegion">
+      <option value="Región Metropolitana">Región Metropolitana</option>
+      <option value="V Región">V Región</option>
+    </select>
+    <p style="font-size:.78rem;color:#888;margin:2px 0 10px;">Si el vendedor se equivocó de región, corrígela aquí — el total se recalcula con el tramo de precio correcto.</p>
     <div style="display:flex;gap:10px;">
       <div style="flex:1;"><label>Pipeño (bidones)</label><input type="number" id="editPipeno" min="0"></div>
       <div style="flex:1;"><label>Granadina (displays)</label><input type="number" id="editGranadina" min="0"></div>
@@ -598,6 +604,7 @@
     document.getElementById("editNumero").value = p.numero;
     document.getElementById("editDepartamento").value = p.departamento || "";
     document.getElementById("editComuna").value = p.comuna;
+    document.getElementById("editRegion").value = regionKeyFromLabel(p.region) === "vr" ? "V Región" : "Región Metropolitana";
     document.getElementById("editPipeno").value = p.cantidad_pipeno;
     document.getElementById("editGranadina").value = p.cantidad_granadina;
     document.getElementById("editFormaPago").value = p.forma_pago;
@@ -621,7 +628,8 @@
 
     const cantidadPipeno = parseInt(document.getElementById("editPipeno").value || "0", 10);
     const cantidadGranadina = parseInt(document.getElementById("editGranadina").value || "0", 10);
-    const regionKey = p ? regionKeyFromLabel(p.region) : "rm";
+    const nuevaRegion = document.getElementById("editRegion").value;
+    const regionKey = regionKeyFromLabel(nuevaRegion);
     const resultado = calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPrecioDespacho: 0 });
 
     const diaSeleccionado = document.getElementById("editDiaReparto").value;
@@ -634,6 +642,7 @@
       numero: document.getElementById("editNumero").value.trim(),
       departamento: document.getElementById("editDepartamento").value.trim() || null,
       comuna: document.getElementById("editComuna").value.trim(),
+      region: nuevaRegion,
       cantidad_pipeno: cantidadPipeno,
       precio_unitario_pipeno: resultado.precioUnitarioPipeno,
       cantidad_granadina: cantidadGranadina,
