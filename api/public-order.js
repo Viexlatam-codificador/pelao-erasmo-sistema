@@ -86,7 +86,8 @@ module.exports = async function handler(req, res) {
     cantidad_granadina: cantidadGranadina,
     observaciones: observaciones || null,
     total: resultado.total,
-    vendedor_id: vendedorWeb.id
+    vendedor_id: vendedorWeb.id,
+    creado_por: vendedorWeb.id
   });
 
   if (insertError) {

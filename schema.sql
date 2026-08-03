@@ -329,5 +329,26 @@ insert into public.configuraciones (clave, valor) values
   ('precio_granadina', '22000');
 
 -- ============================================================================
+-- 6. PERMISOS BASE (necesarios para que RLS pueda aplicarse)
+--
+-- RLS restringe QUÉ FILAS puede ver/editar cada rol, pero primero el rol
+-- necesita el permiso base de Postgres para intentar la operación. En
+-- proyectos nuevos de Supabase esto normalmente ya viene configurado por
+-- defecto para 'anon'/'authenticated', pero si no es el caso, sin este
+-- bloque el cliente del navegador (que usa la clave publicable = rol
+-- 'anon' antes de loguearse, 'authenticated' después) recibe "permission
+-- denied" aunque las políticas de RLS estén bien.
+-- ============================================================================
+grant usage on schema public to anon, authenticated, service_role;
+
+grant select, insert, update, delete on public.perfiles to anon, authenticated, service_role;
+grant select, insert, update, delete on public.pedidos to anon, authenticated, service_role;
+grant select, insert, update, delete on public.comunas_rutas to anon, authenticated, service_role;
+grant select, insert, update, delete on public.historial to anon, authenticated, service_role;
+grant select, insert, update, delete on public.configuraciones to anon, authenticated, service_role;
+
+grant usage, select on all sequences in schema public to anon, authenticated, service_role;
+
+-- ============================================================================
 -- Fin del esquema
 -- ============================================================================
