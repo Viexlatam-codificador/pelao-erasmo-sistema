@@ -4,37 +4,49 @@ Este archivo es un resumen del proyecto para que una sesión nueva de Claude
 Code (u otro desarrollador) pueda continuar sin perder contexto. Léelo
 completo antes de tocar código.
 
-## 🔴 Para leer primero: 3 pendientes de la última sesión
+## ✅ Estado al 2026-08-03: sistema completo funcionando en producción
 
-1. **Logo**: el cliente mandó por chat el logo real de "Distribuidora El
-   Pelao Erasmo" (el del oso/bebé con frutos secos y miel), pidiendo
-   agregarlo donde corresponda. **No se pudo guardar como archivo** — Claude
-   no tiene forma de extraer el archivo original de una imagen pegada en el
-   chat, solo de verla. Falta que el cliente deje el archivo en
-   `assets/logo.png` (o le pase la ruta/lo suba a Downloads) para poder
-   agregarlo en `index.html`, `login.html`, y las topbars de `vendedor.html`
-   / `admin.html`.
-2. **Cuentas de vendedores sin crear todavía**: el cliente pidió cuentas
-   `vendedor1`, `vendedor2`, `vendedor3` con clave. Ya existe el script
-   **`scripts/crear-cuentas-iniciales.js`** que las crea (junto con la
-   cuenta de sistema `pedidos-web`, ver punto 3) — pero necesita la clave
-   secreta de Supabase, que Claude nunca debe manejar. Falta que el cliente
-   la corra él mismo:
-   ```
-   npm install
-   SUPABASE_SERVICE_ROLE_KEY="sb_secret_..." node scripts/crear-cuentas-iniciales.js
-   ```
-   El script imprime las contraseñas generadas UNA vez en la terminal —
-   anotarlas ahí, no quedan en ningún archivo.
-3. **Pedidos públicos con registro automático**: se agregó
-   `api/public-order.js` — cuando un cliente hace un pedido en `index.html`,
-   además de abrirse WhatsApp (como ya era), el pedido intenta quedar
-   registrado solo en el sistema (visible en `admin.html`). Para que
-   funcione de verdad hacen falta las **dos cosas de arriba**: la variable
-   `SUPABASE_SERVICE_ROLE_KEY` en Vercel (ver sección Despliegue) y haber
-   corrido el script del punto 2 (crea la cuenta `pedidos-web` a la que
-   quedan asociados estos pedidos). Mientras tanto no rompe nada: si falla,
-   el pedido igual le llega al vendedor por WhatsApp como siempre.
+Todo lo pendiente de la sesión anterior quedó resuelto y **verificado de
+punta a punta contra el Supabase real, no un mock**:
+
+- **Logo real** de "Distribuidora El Pelao Erasmo" agregado en
+  `assets/logo.jpeg` y wireado en `index.html`, `login.html`, y las topbars
+  de `vendedor.html`/`admin.html`. Confirmado visualmente en producción.
+- **`SUPABASE_SERVICE_ROLE_KEY` configurada en Vercel** (el cliente la
+  agregó él mismo en el dashboard, como corresponde — Claude nunca la vio
+  ni la manejó).
+- **Cuentas creadas** con `scripts/crear-cuentas-iniciales.js`: `pedidos-web`
+  (cuenta de sistema para pedidos públicos) + `vendedor1`, `vendedor2`,
+  `vendedor3`. Login de `vendedor1` verificado en producción: entra,
+  redirige a `vendedor.html`, carga el formulario, sin errores de consola.
+- **`api/public-order.js` verificado en producción**: un pedido de prueba
+  enviado por curl quedó registrado correctamente (`{"ok":true}`).
+
+### 🔧 Un hallazgo importante de esta sesión: el esquema NUNCA se había corrido
+
+A pesar de que la documentación anterior decía "ya está corrido en el
+proyecto real de Supabase", al verificar directamente (consultando la API
+REST con la clave pública) **ninguna tabla existía en la base de datos real**.
+Se corrió `schema.sql` recién en esta sesión, vía SQL Editor de Supabase.
+
+Además, tras correrlo apareció un problema adicional: **los roles
+`anon`/`authenticated`/`service_role` no tenían los permisos base de
+Postgres** (GRANT) para tocar las tablas nuevas — esto es independiente de
+RLS (RLS filtra qué filas, pero antes de eso Postgres exige el permiso base
+de la operación). Sin este GRANT, todo fallaba con "permission denied"
+aunque las políticas de RLS estuvieran perfectas. Se agregó una sección
+nueva al final de `schema.sql` con los `grant` necesarios — **si alguna vez
+se recrea este proyecto desde cero, correr `schema.sql` completo (que ya
+incluye esta sección) debería bastar; no debería repetirse este problema.**
+
+### ⚠️ Pendiente real (no depende de Claude, es decisión del cliente)
+
+**No existe todavía ninguna cuenta con rol `admin`** — solo se crearon
+vendedores. `admin.html` sigue sin poder probarse con login real hasta que
+exista una. Opciones: (a) agregar una cuenta admin al script
+`crear-cuentas-iniciales.js` y correrlo de nuevo (es seguro, no duplica lo
+que ya existe), o (b) crearla a mano en el dashboard de Supabase como decía
+el plan original. Preguntarle al cliente cuál prefiere.
 
 ## Objetivo
 
