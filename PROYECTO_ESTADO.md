@@ -39,14 +39,21 @@ nueva al final de `schema.sql` con los `grant` necesarios — **si alguna vez
 se recrea este proyecto desde cero, correr `schema.sql` completo (que ya
 incluye esta sección) debería bastar; no debería repetirse este problema.**
 
-### ⚠️ Pendiente real (no depende de Claude, es decisión del cliente)
+### ✅ Cuenta admin creada y probada — sistema 100% verificado
 
-**No existe todavía ninguna cuenta con rol `admin`** — solo se crearon
-vendedores. `admin.html` sigue sin poder probarse con login real hasta que
-exista una. Opciones: (a) agregar una cuenta admin al script
-`crear-cuentas-iniciales.js` y correrlo de nuevo (es seguro, no duplica lo
-que ya existe), o (b) crearla a mano en el dashboard de Supabase como decía
-el plan original. Preguntarle al cliente cuál prefiere.
+Se agregó una cuenta `admin` al script `crear-cuentas-iniciales.js` y se
+corrió. **Login de `admin` probado en producción de punta a punta**:
+entra, carga el panel completo, y en la pestaña Resumen se ve en tiempo
+real el pedido de prueba que se mandó por `api/public-order` (Providencia,
+jueves, $45.600, vendedor "Pedidos Web (formulario público)") — confirma
+que todo el flujo público → base de datos → panel admin funciona. La
+pestaña Usuarios también muestra las 5 cuentas correctamente
+(admin, pedidos-web, vendedor1, vendedor2, vendedor3), todas activas.
+
+No queda ningún pendiente técnico conocido. Lo único no probado en vivo es
+"Crear vendedor" desde la UI de `admin.html` (que llama a
+`api/admin-users.js`) y el motor de rutas / exportación a Excel (no
+construidos todavía, ver "Lo que falta por construir").
 
 ## Objetivo
 
