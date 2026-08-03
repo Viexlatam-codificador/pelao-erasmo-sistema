@@ -1,0 +1,9 @@
+{
+  "name": "pelao-erasmo-sistema",
+  "version": "1.0.0",
+  "private": true,
+  "description": "El Pelao Erasmo — sistema de gestión de pedidos y rutas. Sitio estático (sin build step) + una función serverless en /api para creación de usuarios.",
+  "dependencies": {
+    "@supabase/supabase-js": "^2"
+  }
+}

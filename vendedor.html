@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel Vendedor — El Pelao Erasmo</title>
+<link rel="stylesheet" href="assets/brand.css">
+</head>
+<body>
+
+<div class="flag-bar"></div>
+<div class="topbar">
+  <div class="brand">El Pelao Erasmo · Vendedor</div>
+  <div class="user-chip">
+    <span id="nombreVendedor">Cargando...</span>
+    <button class="logout" onclick="cerrarSesion()">Salir</button>
+  </div>
+</div>
+
+<main class="shell">
+
+  <section class="card">
+    <h2 class="card-title">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="16" y2="16"/></svg>
+      Nuevo pedido
+    </h2>
+
+    <label>Región <span style="color:var(--rojo);">*</span></label>
+    <select id="region">
+      <option value="rm">Región Metropolitana</option>
+      <option value="vr">V Región</option>
+    </select>
+
+    <label>Nombre cliente <span style="color:var(--rojo);">*</span></label>
+    <input type="text" id="nombreCliente">
+
+    <label>Teléfono <span style="color:var(--rojo);">*</span></label>
+    <input type="tel" id="telefono">
+
+    <label>Dirección <span style="color:var(--rojo);">*</span></label>
+    <input type="text" id="direccion" placeholder="Calle">
+
+    <div style="display:flex;gap:10px;">
+      <div style="flex:1;">
+        <label>Número <span style="color:var(--rojo);">*</span></label>
+        <input type="text" id="numero">
+      </div>
+      <div style="flex:1;">
+        <label>Departamento</label>
+        <input type="text" id="departamento" placeholder="Opcional">
+      </div>
+    </div>
+
+    <label>Comuna <span style="color:var(--rojo);">*</span></label>
+    <input type="text" id="comuna" placeholder="Ej: Providencia">
+
+    <div style="display:flex;gap:10px;">
+      <div style="flex:1;">
+        <label>Cantidad Pipeño (bidones)</label>
+        <input type="number" id="cantidadPipeno" min="0" value="0">
+      </div>
+      <div style="flex:1;">
+        <label>Cantidad Granadina (displays)</label>
+        <input type="number" id="cantidadGranadina" min="0" value="0">
+      </div>
+    </div>
+    <p id="tierInfo" style="font-size:.85rem;color:#666;"></p>
+
+    <label>Forma de pago</label>
+    <select id="formaPago">
+      <option value="Efectivo contra entrega">Efectivo contra entrega</option>
+      <option value="Transferencia contra entrega">Transferencia contra entrega</option>
+    </select>
+
+    <label>Observaciones</label>
+    <textarea id="observaciones" placeholder="Horario de entrega, referencias, etc."></textarea>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:1px dashed #ddd;">
+      <span style="font-weight:700;color:var(--verde-oscuro);">Total estimado</span>
+      <span id="totalEstimado" style="font-weight:800;font-size:1.2rem;color:var(--verde-oscuro);">$0</span>
+    </div>
+
+    <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="guardarPedido()">Guardar pedido</button>
+    <p class="status-msg" id="formStatus"></p>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M6 2h12v19l-2-1-2 1-2-1-2 1-2-1-2 1V2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+      Mis pedidos
+    </h2>
+    <div id="misPedidosWrap">
+      <p class="empty-state">Cargando tus pedidos...</p>
+    </div>
+  </section>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="assets/supabase-client.js"></script>
+<script src="assets/pricing.js"></script>
+<script src="assets/auth-guard.js"></script>
+<script>
+  const ESTADO_LABEL = {
+    pendiente: "Pendiente",
+    preparacion: "Preparación",
+    listo_despacho: "Listo p/ despacho",
+    en_ruta: "En ruta",
+    entregado: "Entregado",
+    anulado: "Anulado"
+  };
+
+  let perfilActual = null;
+
+  requireSession({ rolesPermitidos: ["vendedor", "admin"] }).then((perfil) => {
+    if (!perfil) return;
+    perfilActual = perfil;
+    document.getElementById("nombreVendedor").textContent = perfil.nombre_completo;
+    cargarMisPedidos();
+  });
+
+  function actualizarTotales() {
+    const regionKey = document.getElementById("region").value;
+    const cantidadPipeno = parseInt(document.getElementById("cantidadPipeno").value || "0", 10);
+    const cantidadGranadina = parseInt(document.getElementById("cantidadGranadina").value || "0", 10);
+    const region = PRICING[regionKey];
+
+    const resultado = calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPrecioDespacho: 0 });
+
+    const tierInfo = document.getElementById("tierInfo");
+    if (cantidadPipeno > 0 && cantidadPipeno < region.min) {
+      tierInfo.style.color = "var(--rojo)";
+      tierInfo.textContent = `Pedido mínimo en ${region.label}: ${region.min} bidones.`;
+    } else if (resultado.tier) {
+      tierInfo.style.color = "#666";
+      tierInfo.textContent = `Precio unitario aplicado: ${money(resultado.precioUnitarioPipeno)} c/u`;
+    } else {
+      tierInfo.textContent = "";
+    }
+
+    document.getElementById("totalEstimado").textContent = money(resultado.total);
+    return resultado;
+  }
+
+  ["region", "cantidadPipeno", "cantidadGranadina"].forEach((id) => {
+    document.getElementById(id).addEventListener("input", actualizarTotales);
+    document.getElementById(id).addEventListener("change", actualizarTotales);
+  });
+  actualizarTotales();
+
+  async function guardarPedido() {
+    const status = document.getElementById("formStatus");
+    status.className = "status-msg";
+    status.textContent = "";
+
+    const regionKey = document.getElementById("region").value;
+    const region = PRICING[regionKey];
+    const nombreCliente = document.getElementById("nombreCliente").value.trim();
+    const telefono = document.getElementById("telefono").value.trim();
+    const direccion = document.getElementById("direccion").value.trim();
+    const numero = document.getElementById("numero").value.trim();
+    const departamento = document.getElementById("departamento").value.trim();
+    const comuna = document.getElementById("comuna").value.trim();
+    const observaciones = document.getElementById("observaciones").value.trim();
+    const formaPago = document.getElementById("formaPago").value;
+    const cantidadPipeno = parseInt(document.getElementById("cantidadPipeno").value || "0", 10);
+    const cantidadGranadina = parseInt(document.getElementById("cantidadGranadina").value || "0", 10);
+
+    if (!nombreCliente || !telefono || !direccion || !numero || !comuna) {
+      status.classList.add("error");
+      status.textContent = "Completa nombre, teléfono, dirección, número y comuna.";
+      return;
+    }
+    if (cantidadPipeno === 0 && cantidadGranadina === 0) {
+      status.classList.add("error");
+      status.textContent = "Ingresa al menos una cantidad de Pipeño o Granadina.";
+      return;
+    }
+
+    const resultado = calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPrecioDespacho: 0 });
+
+    const { error } = await supa.from("pedidos").insert({
+      nombre_cliente: nombreCliente,
+      telefono,
+      direccion,
+      numero,
+      departamento: departamento || null,
+      comuna,
+      region: region.label,
+      cantidad_pipeno: cantidadPipeno,
+      precio_unitario_pipeno: resultado.precioUnitarioPipeno,
+      cantidad_granadina: cantidadGranadina,
+      observaciones: observaciones || null,
+      forma_pago: formaPago,
+      total: resultado.total,
+      vendedor_id: perfilActual.id
+    });
+
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo guardar el pedido: " + error.message;
+      return;
+    }
+
+    status.classList.add("ok");
+    status.textContent = "Pedido guardado correctamente.";
+    ["nombreCliente","telefono","direccion","numero","departamento","comuna","observaciones"].forEach(id => {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("cantidadPipeno").value = 0;
+    document.getElementById("cantidadGranadina").value = 0;
+    actualizarTotales();
+    cargarMisPedidos();
+  }
+
+  async function cargarMisPedidos() {
+    const wrap = document.getElementById("misPedidosWrap");
+    const { data, error } = await supa
+      .from("pedidos")
+      .select("id, fecha, nombre_cliente, comuna, dia_reparto, total, estado, creado_en")
+      .order("creado_en", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      wrap.innerHTML = `<p class="empty-state">No se pudieron cargar tus pedidos.</p>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      wrap.innerHTML = `<p class="empty-state">Todavía no has ingresado pedidos.</p>`;
+      return;
+    }
+
+    const filas = data.map(p => `
+      <tr>
+        <td>${p.fecha}</td>
+        <td>${p.nombre_cliente}</td>
+        <td>${p.comuna}</td>
+        <td>${p.dia_reparto === "sin_asignar" ? "Sin ruta" : (p.dia_reparto || "-")}</td>
+        <td>${money(p.total)}</td>
+        <td><span class="badge badge-${p.estado}">${ESTADO_LABEL[p.estado] || p.estado}</span></td>
+      </tr>
+    `).join("");
+
+    wrap.innerHTML = `
+      <table class="orders">
+        <thead>
+          <tr><th>Fecha</th><th>Cliente</th><th>Comuna</th><th>Día ruta</th><th>Total</th><th>Estado</th></tr>
+        </thead>
+        <tbody>${filas}</tbody>
+      </table>
+    `;
+  }
+</script>
+
+</body>
+</html>

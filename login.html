@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ingresar — El Pelao Erasmo</title>
+<link rel="stylesheet" href="assets/brand.css">
+</head>
+<body>
+
+<div class="flag-bar"></div>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <svg width="40" height="40" viewBox="0 0 24 24" style="stroke:var(--verde);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;">
+      <path d="M7 3h10l-1.3 8a3.7 3.7 0 0 1-7.4 0L7 3z"/><line x1="12" y1="14" x2="12" y2="20"/><line x1="8" y1="21" x2="16" y2="21"/>
+    </svg>
+    <h1>El Pelao Erasmo</h1>
+    <p class="subtitle">Sistema interno de pedidos y rutas</p>
+
+    <form id="loginForm" onsubmit="return false;">
+      <label style="text-align:left;">Usuario</label>
+      <input type="text" id="username" autocomplete="username" placeholder="tu.usuario" autocapitalize="none">
+      <label style="text-align:left;">Contraseña</label>
+      <input type="password" id="password" autocomplete="current-password" placeholder="••••••••">
+      <button type="button" class="btn btn-primary btn-block" style="margin-top:18px;" onclick="iniciarSesion()">Ingresar</button>
+    </form>
+    <p class="status-msg error" id="statusMsg"></p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="assets/supabase-client.js"></script>
+<script>
+  // Si el sistema redirigió aquí con un motivo (bloqueado / sin perfil), avisar.
+  const params = new URLSearchParams(window.location.search);
+  const motivo = params.get("error");
+  if (motivo === "bloqueado") {
+    document.getElementById("statusMsg").textContent = "Tu cuenta está bloqueada. Contacta al administrador.";
+  } else if (motivo === "sin_perfil") {
+    document.getElementById("statusMsg").textContent = "Tu cuenta no tiene un perfil asignado. Contacta al administrador.";
+  }
+
+  async function iniciarSesion() {
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+    const status = document.getElementById("statusMsg");
+    status.textContent = "";
+
+    if (!username || !password) {
+      status.textContent = "Ingresa tu usuario y tu contraseña.";
+      return;
+    }
+
+    const email = emailDesdeUsuario(username);
+    const { data, error } = await supa.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      status.textContent = "Usuario o contraseña incorrectos.";
+      return;
+    }
+
+    const { data: perfil, error: perfilError } = await supa
+      .from("perfiles")
+      .select("rol, activo")
+      .eq("id", data.user.id)
+      .single();
+
+    if (perfilError || !perfil) {
+      await supa.auth.signOut();
+      status.textContent = "Tu cuenta no tiene un perfil asignado. Contacta al administrador.";
+      return;
+    }
+
+    if (!perfil.activo) {
+      await supa.auth.signOut();
+      status.textContent = "Tu cuenta está bloqueada. Contacta al administrador.";
+      return;
+    }
+
+    window.location.href = perfil.rol === "admin" ? "admin.html" : "vendedor.html";
+  }
+
+  document.getElementById("password").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") iniciarSesion();
+  });
+</script>
+
+</body>
+</html>
