@@ -84,11 +84,15 @@ construidos todavía, ver "Lo que falta por construir").
    pedidos web, no una cuenta fantasma. `pedidos-web` se deja creada por si
    se necesita más adelante, pero ya no es el destino por defecto.
 
-Todo lo de esta ronda se probó localmente (sin errores de consola, lógica
-de filtrado/branches confirmada con `javascript_tool`) pero **no se ha
-probado todavía contra Supabase real en producción** — falta abrir
-`admin.html` con la cuenta admin y hacer un pedido real de prueba desde
-`index.html` para confirmar de punta a punta.
+**✅ Verificado en producción real** (no solo local): pedidos de prueba vía
+curl confirmaron que uno sin elegir vendedor quedó en "Vendedor 1" y otro
+eligiendo explícitamente "Vendedor 2" quedó ahí — se vieron correctamente
+reflejados en el Resumen de `admin.html`. El mensaje de día de reparto
+también se probó en `index.html` real con una comuna de la base de datos
+("📅 Repartimos en Providencia los días jueves."), y el selector de
+vendedor carga los nombres reales (incluyendo el rename de "Vendedor 1" a
+un nombre propio, hecho con la función de editar usuario). Sin errores de
+consola en ningún caso.
 
 ## Objetivo
 
