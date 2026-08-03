@@ -38,6 +38,25 @@ body{
 .topbar .brand{
   font-weight:800;
   font-size:1.05rem;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.topbar-logo{
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  object-fit:cover;
+  border:1.5px solid rgba(255,255,255,.7);
+  flex-shrink:0;
+}
+.login-logo{
+  width:76px;
+  height:76px;
+  border-radius:50%;
+  object-fit:cover;
+  box-shadow:0 4px 14px rgba(0,0,0,.15);
+  margin-bottom:6px;
 }
 .topbar .user-chip{
   display:flex;
