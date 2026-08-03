@@ -2,14 +2,14 @@
 // El Pelao Erasmo — Script de configuración inicial (correr UNA sola vez)
 //
 // Crea:
-//   1. La cuenta "pedidos-web": no es para que nadie inicie sesión con ella,
-//      es la cuenta "vendedor" fija a la que quedan asociados los pedidos
-//      que llegan desde el formulario público (index.html) sin login. La
-//      necesita api/public-order.js para poder registrar esos pedidos.
+//   1. La cuenta "pedidos-web": ya no es la que se usa por defecto para los
+//      pedidos públicos (ahora es "vendedor1", ver api/public-order.js), pero
+//      se deja aquí por si se necesita en el futuro — no hace daño que exista.
 //   2. Vendedores vendedor1, vendedor2, vendedor3 (para que el equipo de
 //      ventas pueda entrar a vendedor.html) — el script imprime sus
 //      contraseñas UNA vez en la terminal; anótalas, no quedan guardadas en
-//      ningún archivo.
+//      ningún archivo. Los pedidos que llegan del formulario público sin que
+//      el cliente elija un vendedor quedan asociados a "vendedor1".
 //
 // Es seguro correrlo más de una vez: si una cuenta ya existe, se salta y no
 // la duplica ni le cambia la contraseña.

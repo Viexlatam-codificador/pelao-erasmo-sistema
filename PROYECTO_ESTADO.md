@@ -55,6 +55,41 @@ No queda ningún pendiente técnico conocido. Lo único no probado en vivo es
 `api/admin-users.js`) y el motor de rutas / exportación a Excel (no
 construidos todavía, ver "Lo que falta por construir").
 
+### Ronda 2 de features (mismo día, después de lo anterior)
+
+1. **Imprimir ruta** en `admin.html` (pestaña Pedidos → botón "🖨️ Imprimir
+   ruta"): abre una hoja lista para imprimir con los pedidos filtrados
+   actualmente, ordenados por comuna y dirección, excluyendo `anulado` y
+   `entregado`. Lógica de filtro/orden verificada con datos de prueba.
+2. **Editar usuarios** en `admin.html` (pestaña Usuarios → botón "Editar"):
+   modal para cambiar el nombre completo (update directo vía RLS) y
+   **restablecer contraseña** (nueva función `api/admin-reset-password.js`,
+   mismo patrón de verificación admin-only que `api/admin-users.js`).
+3. **Día de reparto visible para el cliente en `index.html`**: al escribir
+   la comuna, se muestra "📅 Repartimos en `<comuna>` los días `<día>`",
+   leyendo en vivo desde `comunas_rutas` vía el nuevo endpoint público
+   `api/comunas-publicas.js` (GET, sin login, expone solo comuna/región/día
+   de comunas activas — nada sensible). Si el admin cambia un día en la
+   pestaña Comunas/Rutas, se refleja solo con que el cliente recargue la
+   página — no hay nada hardcodeado en el HTML.
+4. **El cliente puede elegir quién lo atiende**: nuevo campo "¿Quién te
+   está atendiendo? (opcional)" en `index.html`, poblado por el nuevo
+   endpoint público `api/vendedores-publicos.js` (GET, sin login, expone
+   solo id + nombre de vendedores activos, excluyendo la cuenta de sistema
+   `pedidos-web`).
+5. **Pedidos públicos ya NO se asocian a `pedidos-web` por defecto** —
+   ahora quedan asociados a **`vendedor1`** (o al vendedor que el cliente
+   eligió en el punto 4, validado en el servidor contra `perfiles` antes de
+   usarlo). Así siempre hay una persona real haciendo seguimiento de los
+   pedidos web, no una cuenta fantasma. `pedidos-web` se deja creada por si
+   se necesita más adelante, pero ya no es el destino por defecto.
+
+Todo lo de esta ronda se probó localmente (sin errores de consola, lógica
+de filtrado/branches confirmada con `javascript_tool`) pero **no se ha
+probado todavía contra Supabase real en producción** — falta abrir
+`admin.html` con la cuenta admin y hacer un pedido real de prueba desde
+`index.html` para confirmar de punta a punta.
+
 ## Objetivo
 
 Evolucionar la landing de pedidos de Pipeño/Granadina de "El Pelao Erasmo" a

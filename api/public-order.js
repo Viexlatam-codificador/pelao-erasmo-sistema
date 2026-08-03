@@ -12,17 +12,19 @@
 // pueda mandar un total falso. Nunca confía en el total que manda el
 // navegador.
 //
-// Todos los pedidos públicos quedan asociados a una cuenta "vendedor" fija
-// (username "pedidos-web"), creada por scripts/crear-cuentas-iniciales.js,
-// para que el admin pueda distinguir en el panel qué pedidos vinieron del
-// formulario público vs. de un vendedor real.
+// El cliente puede elegir en index.html qué vendedor lo está atendiendo
+// (campo opcional, poblado por api/vendedores-publicos.js). Si no elige a
+// nadie, o el id que manda no corresponde a un vendedor activo real, el
+// pedido queda asociado por defecto a la cuenta DEFAULT_VENDEDOR_USERNAME
+// (vendedor1) — así siempre hay una persona real haciendo seguimiento,
+// nunca una cuenta "fantasma".
 // ============================================================================
 
 const { createClient } = require("@supabase/supabase-js");
 const { PRICING, calcularPedido } = require("../assets/pricing.js");
 
 const SUPABASE_URL = "https://kbrnecuueekypztyopua.supabase.co";
-const PEDIDOS_WEB_USERNAME = "pedidos-web";
+const DEFAULT_VENDEDOR_USERNAME = "vendedor1";
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
@@ -61,17 +63,36 @@ module.exports = async function handler(req, res) {
 
   const supaAdmin = createClient(SUPABASE_URL, serviceRoleKey);
 
-  const { data: vendedorWeb, error: vendedorError } = await supaAdmin
-    .from("perfiles")
-    .select("id")
-    .eq("username", PEDIDOS_WEB_USERNAME)
-    .single();
+  // Si el cliente eligió un vendedor en el formulario, verificamos que sea
+  // un vendedor activo real antes de usarlo (nunca confiamos en el id que
+  // manda el navegador sin validarlo).
+  let vendedorId = null;
+  const vendedorElegido = typeof body.vendedorId === "string" ? body.vendedorId.trim() : "";
+  if (vendedorElegido) {
+    const { data: vendedorValido } = await supaAdmin
+      .from("perfiles")
+      .select("id")
+      .eq("id", vendedorElegido)
+      .eq("rol", "vendedor")
+      .eq("activo", true)
+      .maybeSingle();
+    if (vendedorValido) vendedorId = vendedorValido.id;
+  }
 
-  if (vendedorError || !vendedorWeb) {
-    res.status(503).json({
-      error: "El sistema de pedidos automáticos todavía no está configurado (falta la cuenta 'pedidos-web'). Ejecuta scripts/crear-cuentas-iniciales.js."
-    });
-    return;
+  if (!vendedorId) {
+    const { data: vendedorDefecto, error: vendedorError } = await supaAdmin
+      .from("perfiles")
+      .select("id")
+      .eq("username", DEFAULT_VENDEDOR_USERNAME)
+      .single();
+
+    if (vendedorError || !vendedorDefecto) {
+      res.status(503).json({
+        error: `El sistema de pedidos automáticos todavía no está configurado (falta la cuenta '${DEFAULT_VENDEDOR_USERNAME}'). Ejecuta scripts/crear-cuentas-iniciales.js.`
+      });
+      return;
+    }
+    vendedorId = vendedorDefecto.id;
   }
 
   const { error: insertError } = await supaAdmin.from("pedidos").insert({
@@ -86,8 +107,8 @@ module.exports = async function handler(req, res) {
     cantidad_granadina: cantidadGranadina,
     observaciones: observaciones || null,
     total: resultado.total,
-    vendedor_id: vendedorWeb.id,
-    creado_por: vendedorWeb.id
+    vendedor_id: vendedorId,
+    creado_por: vendedorId
   });
 
   if (insertError) {

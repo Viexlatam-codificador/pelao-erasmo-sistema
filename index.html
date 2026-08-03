@@ -422,6 +422,11 @@
     <label>Comuna <span class="required-flag">*</span></label>
     <input type="text" id="comuna" list="comunaList" placeholder="Ej: Providencia" oninput="updateAll()">
     <datalist id="comunaList"></datalist>
+    <p class="price-shown" id="diaRepartoInfo"></p>
+    <label>¿Quién te está atendiendo? (opcional)</label>
+    <select id="vendedorAtiende">
+      <option value="">No lo sé / nadie en particular</option>
+    </select>
     <label>Notas adicionales (opcional)</label>
     <textarea id="notas" placeholder="Horario de entrega, referencias, etc."></textarea>
   </section>
@@ -499,6 +504,42 @@ let currentRegion = "rm";
 
 function normalize(str){
   return (str || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim();
+}
+
+// Comuna -> día de reparto, cargado desde el sistema (admin.html lo administra
+// en la pestaña "Comunas / Rutas"). Si cambia allá, se refleja acá solo con
+// recargar la página — no hay nada hardcodeado.
+const DIA_LABEL_PUBLICO = { lunes:"lunes", martes:"martes", miercoles:"miércoles", jueves:"jueves", viernes:"viernes" };
+let COMUNAS_DIA = {};
+
+async function cargarComunasPublicas(){
+  try{
+    const resp = await fetch("/api/comunas-publicas");
+    const data = await resp.json();
+    if(!Array.isArray(data)) return;
+    const lista = document.getElementById("comunaList");
+    data.forEach(c=>{
+      COMUNAS_DIA[normalize(c.comuna)] = c.dia_reparto;
+      const opt = document.createElement("option");
+      opt.value = c.comuna;
+      lista.appendChild(opt);
+    });
+  }catch(e){ /* si falla, el formulario sigue funcionando igual, solo sin este dato extra */ }
+}
+
+async function cargarVendedoresPublicos(){
+  try{
+    const resp = await fetch("/api/vendedores-publicos");
+    const data = await resp.json();
+    if(!Array.isArray(data)) return;
+    const select = document.getElementById("vendedorAtiende");
+    data.forEach(v=>{
+      const opt = document.createElement("option");
+      opt.value = v.id;
+      opt.textContent = v.nombre_completo;
+      select.appendChild(opt);
+    });
+  }catch(e){ /* opcional, no bloquea el formulario si falla */ }
 }
 
 function money(n){
@@ -596,6 +637,16 @@ function updateAll(){
     deliveryText = "Despacho V Región: se coordina semanalmente contigo.";
   }
   document.getElementById("deliveryPriceShown").textContent = deliveryText;
+
+  const diaInfo = document.getElementById("diaRepartoInfo");
+  const diaReparto = comunaKey ? COMUNAS_DIA[comunaKey] : null;
+  if(!comunaKey){
+    diaInfo.textContent = "";
+  } else if(diaReparto && DIA_LABEL_PUBLICO[diaReparto]){
+    diaInfo.textContent = `📅 Repartimos en ${comunaRaw} los días ${DIA_LABEL_PUBLICO[diaReparto]}.`;
+  } else {
+    diaInfo.textContent = `Día de reparto para ${comunaRaw}: a confirmar contigo.`;
+  }
 
   const total = pipenoSubtotal + granadinaSubtotal + (deliveryPrice || 0);
 
@@ -712,7 +763,8 @@ async function submitOrder(){
         nombre, telefono, direccion, comuna,
         regionLabel: region.label,
         qtyPipeno, qtyGranadina,
-        notas
+        notas,
+        vendedorId: document.getElementById("vendedorAtiende").value || null
       })
     });
   }catch(e){ /* no bloquea el envío por WhatsApp si falla */ }
@@ -726,6 +778,8 @@ async function submitOrder(){
 
 // inicialización
 setRegion("rm");
+cargarComunasPublicas();
+cargarVendedoresPublicos();
 </script>
 
 </body>
