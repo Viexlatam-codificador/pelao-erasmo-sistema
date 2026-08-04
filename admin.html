@@ -143,6 +143,37 @@
       <button class="btn btn-secondary" style="margin-top:14px;" onclick="agregarComuna()">Agregar comuna</button>
       <p class="status-msg" id="comunaStatus"></p>
     </section>
+
+    <section class="card">
+      <p class="subcard-title">Precios de productos</p>
+      <p style="font-size:.85rem;color:#666;margin:-4px 0 14px;">
+        Estos son los precios que ven los clientes en la landing y con los que se calculan los pedidos
+        (nuevos, del vendedor, y editados aquí). No afecta el despacho, que se administra por comuna arriba.
+      </p>
+
+      <p class="subcard-title" style="font-size:.75rem;">Pipeño — Región Metropolitana ($ por bidón)</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:110px;"><label>12 a 19 bidones</label><input type="number" id="precioRmT1" min="0" step="50"></div>
+        <div style="flex:1;min-width:110px;"><label>20 a 39 bidones</label><input type="number" id="precioRmT2" min="0" step="50"></div>
+        <div style="flex:1;min-width:110px;"><label>Sobre 40 bidones</label><input type="number" id="precioRmT3" min="0" step="50"></div>
+      </div>
+
+      <p class="subcard-title" style="font-size:.75rem;margin-top:14px;">Pipeño — V Región ($ por bidón)</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:110px;"><label>20 a 29 bidones</label><input type="number" id="precioVrT1" min="0" step="50"></div>
+        <div style="flex:1;min-width:110px;"><label>30 a 39 bidones</label><input type="number" id="precioVrT2" min="0" step="50"></div>
+        <div style="flex:1;min-width:110px;"><label>Sobre 40 bidones</label><input type="number" id="precioVrT3" min="0" step="50"></div>
+      </div>
+
+      <p class="subcard-title" style="font-size:.75rem;margin-top:14px;">Granadina</p>
+      <div style="max-width:220px;">
+        <label>Precio por display ($)</label>
+        <input type="number" id="precioGranadina" min="0" step="500">
+      </div>
+
+      <button class="btn btn-secondary" style="margin-top:14px;" onclick="guardarPreciosProductos()">Guardar precios</button>
+      <p class="status-msg" id="preciosStatus"></p>
+    </section>
   </section>
 
   <!-- ===================== USUARIOS ===================== -->
@@ -293,7 +324,70 @@
     cargarPedidos();
     cargarComunas();
     cargarUsuarios();
+    cargarPreciosVigentes();
   });
+
+  // Carga los precios vigentes (los que ya estén guardados) para que el
+  // modal de editar pedido recalcule con el precio correcto, y para
+  // mostrarlos en el formulario de "Precios de productos" más abajo.
+  async function cargarPreciosVigentes() {
+    try {
+      const resp = await fetch("/api/precios-publicos");
+      const datos = await resp.json();
+      aplicarPrecios(datos);
+      mostrarPreciosEnFormulario();
+    } catch (e) { /* sigue con los precios de respaldo */ }
+  }
+
+  function mostrarPreciosEnFormulario() {
+    document.getElementById("precioRmT1").value = PRICING.rm.tiers[0].price;
+    document.getElementById("precioRmT2").value = PRICING.rm.tiers[1].price;
+    document.getElementById("precioRmT3").value = PRICING.rm.tiers[2].price;
+    document.getElementById("precioVrT1").value = PRICING.vr.tiers[0].price;
+    document.getElementById("precioVrT2").value = PRICING.vr.tiers[1].price;
+    document.getElementById("precioVrT3").value = PRICING.vr.tiers[2].price;
+    document.getElementById("precioGranadina").value = GRANADINA_PRICE;
+  }
+
+  async function guardarPreciosProductos() {
+    const status = document.getElementById("preciosStatus");
+    status.className = "status-msg";
+
+    const nuevaPricingTiers = {
+      rm: {
+        min: PRICING.rm.min,
+        tiers: [
+          { min: 12, max: 19, price: parseInt(document.getElementById("precioRmT1").value, 10) || 0 },
+          { min: 20, max: 39, price: parseInt(document.getElementById("precioRmT2").value, 10) || 0 },
+          { min: 40, max: null, price: parseInt(document.getElementById("precioRmT3").value, 10) || 0 }
+        ]
+      },
+      vr: {
+        min: PRICING.vr.min,
+        tiers: [
+          { min: 20, max: 29, price: parseInt(document.getElementById("precioVrT1").value, 10) || 0 },
+          { min: 30, max: 39, price: parseInt(document.getElementById("precioVrT2").value, 10) || 0 },
+          { min: 40, max: null, price: parseInt(document.getElementById("precioVrT3").value, 10) || 0 }
+        ]
+      }
+    };
+    const nuevaGranadina = parseInt(document.getElementById("precioGranadina").value, 10) || 0;
+
+    const [r1, r2] = await Promise.all([
+      supa.from("configuraciones").update({ valor: nuevaPricingTiers }).eq("clave", "pricing_tiers"),
+      supa.from("configuraciones").update({ valor: nuevaGranadina }).eq("clave", "precio_granadina")
+    ]);
+
+    if (r1.error || r2.error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo guardar: " + (r1.error || r2.error).message;
+      return;
+    }
+
+    aplicarPrecios({ pricing_tiers: nuevaPricingTiers, precio_granadina: nuevaGranadina });
+    status.classList.add("ok");
+    status.textContent = "Precios actualizados. Los clientes y vendedores los verán apenas recarguen su página.";
+  }
 
   function mostrarTab(tab) {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));

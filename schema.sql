@@ -335,7 +335,8 @@ create policy "configuraciones_admin_todo"
 insert into public.configuraciones (clave, valor) values
   ('whatsapp_pedidos', '"56957248108"'),
   ('despacho_referencial_rm', '3000'),
-  ('precio_granadina', '22000');
+  ('precio_granadina', '22000'),
+  ('pricing_tiers', '{"rm":{"min":12,"tiers":[{"min":12,"max":19,"price":3800},{"min":20,"max":39,"price":3700},{"min":40,"max":null,"price":3600}]},"vr":{"min":20,"tiers":[{"min":20,"max":29,"price":3900},{"min":30,"max":39,"price":3800},{"min":40,"max":null,"price":3600}]}}');
 
 -- ============================================================================
 -- 6. PERMISOS BASE (necesarios para que RLS pueda aplicarse)

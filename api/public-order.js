@@ -21,7 +21,7 @@
 // ============================================================================
 
 const { createClient } = require("@supabase/supabase-js");
-const { PRICING, calcularPedido } = require("../assets/pricing.js");
+const { PRICING, calcularPedido, aplicarPrecios } = require("../assets/pricing.js");
 
 const SUPABASE_URL = "https://kbrnecuueekypztyopua.supabase.co";
 const DEFAULT_VENDEDOR_USERNAME = "vendedor1";
@@ -58,10 +58,24 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  // Precio recalculado en el servidor — nunca se confía en el total del navegador.
-  const resultado = calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPrecioDespacho: 0 });
-
   const supaAdmin = createClient(SUPABASE_URL, serviceRoleKey);
+
+  // Trae los precios vigentes (los que el admin haya configurado) ANTES de
+  // calcular — si esto fallara por lo que sea, calcularPedido igual corre
+  // con los valores de respaldo de pricing.js, nunca se cae el pedido.
+  const { data: configPrecios } = await supaAdmin
+    .from("configuraciones")
+    .select("clave, valor")
+    .in("clave", ["pricing_tiers", "precio_granadina"]);
+  if (configPrecios) {
+    const datos = {};
+    configPrecios.forEach(fila => { datos[fila.clave] = fila.valor; });
+    aplicarPrecios(datos);
+  }
+
+  // Precio recalculado en el servidor con los precios vigentes — nunca se
+  // confía en el total que manda el navegador.
+  const resultado = calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPrecioDespacho: 0 });
 
   // Si el cliente eligió un vendedor en el formulario, verificamos que sea
   // un vendedor activo real antes de usarlo (nunca confiamos en el id que

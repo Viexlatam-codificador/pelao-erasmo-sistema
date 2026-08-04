@@ -462,7 +462,10 @@ const WHATSAPP_NUMBER = "56957248108";
 // automáticamente, además de abrirse WhatsApp. Vive en /api/public-order.js.
 const FORM_ENDPOINT = "/api/public-order";
 
-// Precios por tramo de cantidad (bidones de 5 Lts), según flyer oficial
+// Precios de respaldo (por si falla la carga desde el sistema) — la fuente
+// real de verdad es la tabla `configuraciones`, que el admin edita en
+// admin.html → Comunas/Rutas → "Precios de productos". Se sobreescriben
+// más abajo en cargarPreciosPublicos(), apenas carga la página.
 const PRICING = {
   rm: {
     label: "Región Metropolitana",
@@ -483,7 +486,7 @@ const PRICING = {
     ]
   }
 };
-const GRANADINA_PRICE = 22000;
+let GRANADINA_PRICE = 22000;
 
 // Precio de despacho por comuna: lo administra el admin en la pestaña
 // Comunas/Rutas (columna "Despacho ($)") y se carga en vivo más abajo, en
@@ -540,6 +543,36 @@ async function cargarVendedoresPublicos(){
       select.appendChild(opt);
     });
   }catch(e){ /* opcional, no bloquea el formulario si falla */ }
+}
+
+// Carga los precios vigentes (los que el admin haya configurado) — si
+// falla, la página sigue funcionando con los precios de respaldo de arriba.
+function aplicarPreciosLocal(datos){
+  if(datos && datos.pricing_tiers){
+    ["rm","vr"].forEach(key=>{
+      const region = datos.pricing_tiers[key];
+      if(!region || !Array.isArray(region.tiers)) return;
+      PRICING[key].min = region.min;
+      PRICING[key].tiers = region.tiers.map(t=>({
+        min: t.min,
+        max: (t.max === null || t.max === undefined) ? Infinity : t.max,
+        price: t.price
+      }));
+    });
+  }
+  if(datos && typeof datos.precio_granadina === "number"){
+    GRANADINA_PRICE = datos.precio_granadina;
+  }
+}
+
+async function cargarPreciosPublicos(){
+  try{
+    const resp = await fetch("/api/precios-publicos");
+    const datos = await resp.json();
+    aplicarPreciosLocal(datos);
+    renderTiers();
+    updateAll();
+  }catch(e){ /* si falla, sigue con los precios de respaldo */ }
 }
 
 function money(n){
@@ -782,6 +815,7 @@ async function submitOrder(){
 setRegion("rm");
 cargarComunasPublicas();
 cargarVendedoresPublicos();
+cargarPreciosPublicos();
 </script>
 
 </body>

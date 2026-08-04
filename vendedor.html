@@ -117,7 +117,20 @@
     perfilActual = perfil;
     document.getElementById("nombreVendedor").textContent = perfil.nombre_completo;
     cargarMisPedidos();
+    cargarPreciosVigentes();
   });
+
+  // Carga los precios vigentes (los que el admin haya configurado) — si
+  // falla, el formulario sigue funcionando con los precios de respaldo de
+  // assets/pricing.js.
+  async function cargarPreciosVigentes() {
+    try {
+      const resp = await fetch("/api/precios-publicos");
+      const datos = await resp.json();
+      aplicarPrecios(datos);
+      actualizarTotales();
+    } catch (e) { /* sigue con los precios de respaldo */ }
+  }
 
   function actualizarTotales() {
     const regionKey = document.getElementById("region").value;

@@ -4,23 +4,46 @@ Este archivo es un resumen del proyecto para que una sesión nueva de Claude
 Code (u otro desarrollador) pueda continuar sin perder contexto. Léelo
 completo antes de tocar código.
 
-## ✅ Todas las migraciones SQL corridas y verificadas (al 2026-08-03, 16:10)
+## 🔴 Pendiente urgente: falta correr una migración SQL más (precios de producto)
+
+Se hizo un cambio grande: **todos los precios (despacho, Pipeño por tramo,
+Granadina) ahora se administran desde `admin.html` y se leen en vivo desde
+la base de datos** — en vez de estar fijos en el código. Antes, si el admin
+cambiaba un precio, no se reflejaba en la landing pública ni en el
+vendedor; ahora sí, todo lee de la misma fuente (`configuraciones` para
+Pipeño/Granadina, `comunas_rutas.precio_despacho` para despacho).
+
+Falta agregar la fila `pricing_tiers` a `configuraciones` (el código para
+usarla ya está desplegado, pero sin esta fila el sistema simplemente sigue
+usando los precios de respaldo del código — no se rompe nada, pero el
+admin no puede cambiarlos hasta correr esto):
+
+**Correr esto una sola vez en Supabase → SQL Editor → Run** (en una
+pestaña de consulta nueva, con cuidado de que Chrome no traduzca el SQL —
+ver nota más abajo):
+
+```sql
+insert into public.configuraciones (clave, valor) values
+  ('pricing_tiers', '{"rm":{"min":12,"tiers":[{"min":12,"max":19,"price":3800},{"min":20,"max":39,"price":3700},{"min":40,"max":null,"price":3600}]},"vr":{"min":20,"tiers":[{"min":20,"max":29,"price":3900},{"min":30,"max":39,"price":3800},{"min":40,"max":null,"price":3600}]}}')
+on conflict (clave) do nothing;
+```
+
+Ya está agregado también al final de `schema.sql`.
+
+### ⚠️ Nota sobre Chrome traduciendo el SQL Editor
+
+Ya pasó una vez en esta sesión: si Chrome tiene la traducción automática
+activada para supabase.com, puede traducir el código SQL a español dentro
+del editor ("alterar la tabla", "agregar columna"...) y eso ya no es SQL
+válido. Antes de correr cualquier SQL nuevo, verificar que se vea en
+inglés/código, o desactivar la traducción para ese sitio.
+
+## ✅ Migraciones anteriores corridas y verificadas (2026-08-03)
 
 - Sábado/domingo + día manual (`pedidos.dia_reparto_manual`): ✅ corrida.
 - Precio de despacho (`comunas_rutas.precio_despacho`): ✅ corrida y
-  verificada vía `api/comunas-publicas.js` en producción (todas las
-  comunas parten en $0, el admin las va actualizando desde la pestaña
-  Comunas/Rutas).
-
-No queda ninguna migración pendiente. Si se recrea el proyecto desde cero
-alguna vez, `schema.sql` ya incluye todo (no hay que aplicar nada aparte).
-
-### ⚠️ Siguiente paso para el cliente (no técnico, solo uso)
-
-El precio de despacho de cada comuna parte en $0 — hay que entrar a
-`admin.html` → pestaña **Comunas/Rutas** y cargar el precio real de cada
-una en la columna "Despacho ($)" para que el cliente lo vea correcto en la
-landing pública.
+  verificada en producción. El admin ya puede cargar el precio real de
+  cada comuna en Comunas/Rutas → columna "Despacho ($)" (parten en $0).
 
 ## ✅ Estado al 2026-08-03: sistema completo funcionando en producción
 
@@ -169,8 +192,56 @@ producción real** (el cliente corrió la migración y confirmamos que
    total en vivo; sin configurar muestra el mensaje referencial; ambos
    casos verificados sin errores de consola.
 
-**Requiere una migración SQL nueva** (ver sección roja al principio de
-este archivo) — todavía no corrida por el cliente.
+✅ Migración corrida y verificada en producción.
+
+### Ronda 5 (mismo día): precios de Pipeño/Granadina también editables, todo conectado
+
+El cliente pidió explícitamente: si cambia un precio en admin (despacho,
+o los de Pipeño/Granadina), debe reflejarse en la página de compra, y
+poder cambiar TODOS los precios desde admin.
+
+1. **Nueva fuente única de verdad para precios de producto**: tabla
+   `configuraciones`, clave `pricing_tiers` (tramos de Pipeño por región,
+   jsonb) y `precio_granadina` (ya existía esa clave, antes sin usar).
+2. **`assets/pricing.js`**: se agregó `aplicarPrecios(datos)` — sigue
+   siendo lógica pura (no toca Supabase/DOM), solo permite sobreescribir
+   `PRICING`/`GRANADINA_PRICE` con datos ya cargados por quien la use.
+   `GRANADINA_PRICE` pasó de `const` a `let` (y en el export de Node se
+   expone con un getter, para que siempre se lea el valor vigente y no
+   quede "congelado" en el valor con el que se cargó el módulo — se
+   verificó con un smoke test en Node).
+3. **`api/precios-publicos.js`** (nuevo, público, sin login): expone
+   `pricing_tiers` y `precio_granadina` para que cualquier página los
+   pueda leer.
+4. **`api/public-order.js`**: antes de recalcular el precio de un pedido
+   público, ahora trae los precios vigentes de `configuraciones` y los
+   aplica — así el recálculo del servidor (que existe para que un cliente
+   no pueda mandar un total falso) usa los precios REALES actuales, no
+   los de respaldo desactualizados.
+5. **`index.html`**: `PRICING`/`GRANADINA_PRICE` locales (tenía su propia
+   copia, no compartía `assets/pricing.js`) ahora se sobreescriben al
+   cargar la página con `cargarPreciosPublicos()`.
+6. **`vendedor.html`**: al iniciar sesión, carga los precios vigentes y
+   los aplica antes de que el vendedor calcule un pedido nuevo.
+7. **`admin.html`**: nueva tarjeta "Precios de productos" en la pestaña
+   Comunas/Rutas — 6 tramos de Pipeño (RM y V Región) + precio de
+   Granadina, todos editables. Al guardar, además de escribir en la base
+   de datos, aplica los precios nuevos en memoria al instante (el modal de
+   editar pedido ya los usa sin recargar la página).
+
+**Probado exhaustivamente con mock y Node**: `aplicarPrecios` verificado
+en Node directo (incluyendo que `max: null` se convierte bien a
+`Infinity` y que `tierFor` elige el tramo correcto); en el mock de
+`admin.html` se confirmó que guardar un precio nuevo se refleja de
+inmediato en el cálculo del modal de editar pedido (probado con un caso
+real: cambiar el tramo 12-19 de RM a $4.200 hizo que un pedido de 12
+bidones recalculara el total correctamente); en `index.html` se confirmó
+que aplicar precios nuevos actualiza el subtotal mostrado en vivo.
+
+**Requiere la migración SQL de `pricing_tiers`** (ver sección roja al
+principio de este archivo) — todavía no corrida por el cliente. Mientras
+tanto el sistema sigue funcionando normal con los precios de respaldo
+(los mismos de siempre), solo que el admin no puede cambiarlos todavía.
 
 ## Objetivo
 

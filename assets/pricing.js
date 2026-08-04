@@ -27,8 +27,34 @@ const PRICING = {
   }
 };
 
-const GRANADINA_PRICE = 22000;
+let GRANADINA_PRICE = 22000;
 const DEFAULT_DELIVERY_RM = 3000;
+
+// Estos valores de arriba son solo el respaldo inicial (por si falla la
+// carga desde la base de datos). La fuente real de verdad son las filas
+// 'pricing_tiers' y 'precio_granadina' de la tabla `configuraciones`, que
+// el admin edita en admin.html → pestaña Comunas/Rutas → "Precios de
+// productos". Cada página (index.html, vendedor.html, admin.html,
+// api/public-order.js) las carga por su cuenta y llama a esta función
+// para aplicarlas — pricing.js en sí no sabe nada de Supabase/red, sigue
+// siendo lógica pura.
+function aplicarPrecios(datos) {
+  if (datos && datos.pricing_tiers) {
+    ["rm", "vr"].forEach(key => {
+      const region = datos.pricing_tiers[key];
+      if (!region || !Array.isArray(region.tiers)) return;
+      PRICING[key].min = region.min;
+      PRICING[key].tiers = region.tiers.map(t => ({
+        min: t.min,
+        max: t.max === null || t.max === undefined ? Infinity : t.max,
+        price: t.price
+      }));
+    });
+  }
+  if (datos && typeof datos.precio_granadina === "number") {
+    GRANADINA_PRICE = datos.precio_granadina;
+  }
+}
 
 function regionKeyFromLabel(label) {
   if (label === PRICING.vr.label) return "vr";
@@ -77,7 +103,15 @@ function calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPr
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    PRICING, GRANADINA_PRICE, DEFAULT_DELIVERY_RM,
-    regionKeyFromLabel, tierFor, money, normalizeComuna, calcularPedido
+    PRICING, DEFAULT_DELIVERY_RM,
+    regionKeyFromLabel, tierFor, money, normalizeComuna, calcularPedido, aplicarPrecios
   };
+  // GRANADINA_PRICE es un número (no un objeto), así que si se exportara
+  // como propiedad normal quedaría "congelado" en su valor inicial aunque
+  // aplicarPrecios() lo cambie después — con un getter siempre se lee el
+  // valor actual.
+  Object.defineProperty(module.exports, "GRANADINA_PRICE", {
+    get: () => GRANADINA_PRICE,
+    enumerable: true
+  });
 }
