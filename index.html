@@ -328,11 +328,236 @@
     margin-top:4px;
     display:none;
   }
+
+  /* ===================== Panel de comunas (zonas de reparto) ===================== */
+  .comunas-tab{
+    position:fixed;
+    left:0;
+    top:50%;
+    transform:translateY(-50%);
+    z-index:40;
+    background:var(--verde-oscuro);
+    color:#fff;
+    border:none;
+    border-radius:0 10px 10px 0;
+    padding:12px 8px;
+    font-size:.78rem;
+    font-weight:700;
+    line-height:1.2;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+    cursor:pointer;
+    box-shadow:2px 0 10px rgba(0,0,0,.2);
+    writing-mode:vertical-rl;
+    text-orientation:mixed;
+  }
+  .comunas-overlay{
+    display:none;
+    position:fixed;inset:0;
+    background:rgba(0,0,0,.5);
+    z-index:44;
+  }
+  .comunas-overlay.open{display:block;}
+  .comunas-panel{
+    position:fixed;
+    top:0;left:0;
+    height:100vh;
+    width:88%;
+    max-width:340px;
+    background:#fff;
+    z-index:45;
+    box-shadow:4px 0 24px rgba(0,0,0,.25);
+    transform:translateX(-100%);
+    transition:transform .28s ease;
+    overflow-y:auto;
+    padding:18px 16px 30px;
+  }
+  .comunas-panel.open{transform:translateX(0);}
+  .comunas-panel h3{
+    color:var(--verde-oscuro);
+    font-size:1.05rem;
+    margin:0 0 4px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .comunas-panel .close-panel{
+    background:none;
+    border:none;
+    font-size:1.4rem;
+    line-height:1;
+    color:#888;
+    cursor:pointer;
+    padding:4px 8px;
+  }
+  .comunas-panel .comunas-sub{
+    font-size:.8rem;
+    color:#777;
+    margin:0 0 14px;
+  }
+  .comunas-dia-group{
+    margin-bottom:12px;
+    padding-bottom:10px;
+    border-bottom:1px dashed #eee;
+  }
+  .comunas-dia-group h4{
+    margin:0 0 4px;
+    font-size:.85rem;
+    color:var(--verde);
+    text-transform:uppercase;
+    letter-spacing:.3px;
+  }
+  .comunas-dia-group p{
+    margin:0;
+    font-size:.88rem;
+    color:#333;
+  }
+  .comunas-region-actual{
+    font-size:.78rem;
+    color:#777;
+    margin:0 0 12px;
+    background:#f6f8f4;
+    border-radius:8px;
+    padding:6px 10px;
+    display:inline-block;
+  }
+  .comunas-especiales-group{
+    margin:14px 0 12px;
+    padding:10px;
+    background:#fff8e9;
+    border:1px solid #f0dfb0;
+    border-radius:10px;
+  }
+  .comunas-especiales-group h4{
+    margin:0 0 6px;
+    font-size:.82rem;
+    color:#8a5a00;
+  }
+  .comunas-especiales-group p{
+    margin:0 0 4px;
+    font-size:.82rem;
+    color:#5c4300;
+  }
+  /* Resumen de zonas de reparto y precios, visible de inmediato al entrar a
+     la página (a diferencia del panel lateral completo, que hay que abrir
+     tocando la pestaña) — no bloquea nada, es parte normal del flujo. */
+  .zonas-resumen-inline{
+    background:#f6f8f4;
+    border:1px solid #dde6d5;
+    border-radius:14px;
+    padding:14px 16px;
+    margin:0 16px 16px;
+  }
+  .zonas-resumen-inline h3{
+    margin:0 0 4px;
+    font-size:.95rem;
+    color:var(--verde-oscuro);
+  }
+  .zonas-resumen-inline .comunas-dia-group,
+  .zonas-resumen-inline .comunas-especiales-group{
+    margin-bottom:8px;
+    padding-bottom:8px;
+  }
+  .ver-detalle-zonas{
+    background:none;
+    border:none;
+    color:var(--verde-oscuro);
+    font-weight:700;
+    font-size:.82rem;
+    padding:6px 0 0;
+    cursor:pointer;
+    text-decoration:underline;
+  }
+  .comunas-no-disponibles{
+    margin-top:16px;
+    background:#fdf2f1;
+    border:1px dashed var(--rojo);
+    border-radius:10px;
+    padding:10px 12px;
+  }
+  .comunas-no-disponibles h4{
+    margin:0 0 4px;
+    font-size:.85rem;
+    color:var(--rojo);
+  }
+  .comunas-no-disponibles p{
+    margin:0;
+    font-size:.85rem;
+    color:#555;
+  }
+  .empty-comunas{
+    font-size:.85rem;
+    color:#888;
+  }
+
+  /* ===================== Banner de delivery (editable desde admin) ===================== */
+  .delivery-banner{
+    display:none;
+    gap:12px;
+    align-items:flex-start;
+    background:linear-gradient(135deg,#eafaf0,#fff);
+    border:2px solid var(--verde-claro);
+    border-radius:14px;
+    padding:14px 16px;
+    margin-bottom:16px;
+    box-shadow:0 2px 8px rgba(30,125,50,.12);
+  }
+  .delivery-banner.tipo-pago{
+    border-color:var(--miel);
+    background:linear-gradient(135deg,#fff8e6,#fff);
+  }
+  .delivery-banner .banner-icon{ font-size:1.6rem; line-height:1; }
+  .delivery-banner .banner-text{ flex:1; min-width:0; }
+  .delivery-banner h3{
+    margin:0 0 3px;
+    font-size:1rem;
+    color:var(--verde-oscuro);
+  }
+  .delivery-banner p{
+    margin:0;
+    font-size:.86rem;
+    color:#444;
+  }
+  .delivery-banner img{
+    display:block;
+    max-width:100%;
+    border-radius:10px;
+    margin-bottom:8px;
+  }
+  .banner-countdown{
+    display:inline-block;
+    margin-top:8px;
+    font-weight:800;
+    font-size:.82rem;
+    color:var(--rojo);
+    background:#fff;
+    border:1px solid #f3c8c4;
+    border-radius:20px;
+    padding:3px 10px;
+  }
 </style>
 </head>
 <body>
 
 <div class="flag-bar"></div>
+
+<button type="button" class="comunas-tab" onclick="abrirPanelComunas()">
+  📍 Zonas de reparto
+</button>
+<div class="comunas-overlay" id="comunasOverlay" onclick="cerrarPanelComunas()"></div>
+<aside class="comunas-panel" id="comunasPanel">
+  <h3>Zonas de reparto <button type="button" class="close-panel" onclick="cerrarPanelComunas()">×</button></h3>
+  <p class="comunas-sub">Revisa si hacemos despacho a tu comuna antes de armar tu pedido.</p>
+  <div id="comunasDisponiblesWrap">
+    <p class="empty-comunas">Cargando comunas...</p>
+  </div>
+  <div class="comunas-no-disponibles" id="comunasNoDisponiblesSection" style="display:none;">
+    <h4>Por ahora no llegamos a:</h4>
+    <p id="comunasNoDisponiblesWrap"></p>
+  </div>
+</aside>
 <header class="hero">
   <svg class="vine-decor" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
     <path d="M20 90 Q40 60 30 40 Q20 20 40 10" stroke="#fff" stroke-width="2" fill="none"/>
@@ -344,7 +569,7 @@
     <circle cx="16" cy="80" r="5" fill="#fff"/>
   </svg>
   <div class="hero-top">
-    <img class="avatar" src="assets/logo.jpeg" alt="El Pelao Erasmo">
+    <img class="avatar" id="heroImg" src="data:image/jpeg;base64,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" alt="El Pelao Erasmo">
     <div class="hero-text">
       <h1>El Pelao Erasmo</h1>
       <p class="subtitle">Distribuidores oficiales de Las Pipas de Sáez</p>
@@ -358,9 +583,23 @@
 
 <main>
 
+  <section class="delivery-banner" id="deliveryBanner">
+    <div class="banner-icon">🚚</div>
+    <div class="banner-text">
+      <img id="bannerImagen" style="display:none;" alt="Promoción de delivery">
+      <h3 id="bannerTitulo"></h3>
+      <p id="bannerMensaje"></p>
+      <p class="banner-countdown" id="bannerCountdown" style="display:none;"></p>
+    </div>
+  </section>
+
   <section class="region-tabs">
     <button type="button" id="tabRM" class="active" onclick="setRegion('rm')">Región Metropolitana</button>
     <button type="button" id="tabVR" onclick="setRegion('vr')">V Región</button>
+  </section>
+
+  <section class="zonas-resumen-inline" id="zonasResumenInline">
+    <p class="empty-comunas">Cargando comunas y precios de despacho...</p>
   </section>
 
   <section class="flyer-preview">
@@ -386,8 +625,8 @@
   </section>
 
   <section class="product">
-    <h2><svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="9" r="2.3"/><circle cx="15" cy="9" r="2.3"/><circle cx="12" cy="13" r="2.3"/><circle cx="9" cy="17" r="2.3"/><circle cx="15" cy="17" r="2.3"/><path d="M12 6V3"/><path d="M12 3c1.5-1 3-1 4 0"/></svg>Granadina 750cc</h2>
-    <p class="subtotal-line">Display de 12 unidades — $22.000 c/u</p>
+    <h2><svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="9" r="2.3"/><circle cx="15" cy="9" r="2.3"/><circle cx="12" cy="13" r="2.3"/><circle cx="9" cy="17" r="2.3"/><circle cx="15" cy="17" r="2.3"/><path d="M12 6V3"/><path d="M12 3c1.5-1 3-1 4 0"/></svg><span id="granadinaNombreTexto">Granadina 700cc</span></h2>
+    <p class="subtotal-line" id="granadinaUnidadTexto">Display de 12 unidades — $22.000 c/u</p>
     <label>Cantidad de displays</label>
     <div class="stepper">
       <button type="button" onclick="stepQty('granadina',-1)">−</button>
@@ -396,6 +635,8 @@
     </div>
     <p class="subtotal-line">Subtotal Granadina: <b id="granadinaSubtotal">$0</b></p>
   </section>
+
+  <div id="productosExtraWrap"></div>
 
   <section class="pallet-note">
     <svg class="icon" viewBox="0 0 24 24" style="stroke:#b8860b;"><path d="M3 8l9-5 9 5-9 5-9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>¿Necesitas comprar por <b>pallets</b>? Consulta precio directo por <a href="#" onclick="openWhatsappOnly();return false;">WhatsApp</a>.
@@ -422,11 +663,6 @@
     <label>Comuna <span class="required-flag">*</span></label>
     <input type="text" id="comuna" list="comunaList" placeholder="Ej: Providencia" oninput="updateAll()">
     <datalist id="comunaList"></datalist>
-    <p class="price-shown" id="diaRepartoInfo"></p>
-    <label>¿Quién te está atendiendo? (opcional)</label>
-    <select id="vendedorAtiende">
-      <option value="">No lo sé / nadie en particular</option>
-    </select>
     <label>Notas adicionales (opcional)</label>
     <textarea id="notas" placeholder="Horario de entrega, referencias, etc."></textarea>
   </section>
@@ -453,19 +689,36 @@
   <img id="lightboxImg" src="">
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 // ======================= CONFIGURACIÓN (editable) =======================
-// Número de WhatsApp donde llegan los pedidos (sin +, sin espacios)
+// Número de WhatsApp PRINCIPAL (admin) donde llegan los pedidos cuando no
+// vienen de un link personalizado de vendedor (sin +, sin espacios).
 const WHATSAPP_NUMBER = "56957248108";
 
-// Endpoint propio (Vercel) que registra el pedido en el sistema (Supabase)
-// automáticamente, además de abrirse WhatsApp. Vive en /api/public-order.js.
-const FORM_ENDPOINT = "/api/public-order";
+// Endpoint de Formspree — se mantiene por compatibilidad pero ya no es la
+// vía principal de registro: cada pedido ahora se guarda directo en la
+// base de datos (ver SUPABASE_URL más abajo), donde el administrador y cada
+// vendedor pueden verlo desde su panel. Deja TU_ID_AQUI si no usas Formspree.
+const FORM_ENDPOINT = "https://formspree.io/f/TU_ID_AQUI";
 
-// Precios de respaldo (por si falla la carga desde el sistema) — la fuente
-// real de verdad es la tabla `configuraciones`, que el admin edita en
-// admin.html → Comunas/Rutas → "Precios de productos". Se sobreescriben
-// más abajo en cargarPreciosPublicos(), apenas carga la página.
+// Conexión a Supabase: guarda cada pedido en la base de datos del sistema
+// interno (misma que usan login.html/vendedor.html/admin.html) y permite
+// resolver un link personalizado de vendedor (?v=usuario) para que el
+// pedido llegue al WhatsApp de ese vendedor en vez del número principal.
+// La clave PUBLICABLE es segura de exponer en el navegador (no es la clave
+// secreta) — las tablas están protegidas con Row Level Security.
+const SUPABASE_URL = "https://kbrnecuueekypztyopua.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_nFPkaD6iiTKZMlhIufS9-w__4fdlfqo";
+let supaPublic = null;
+try {
+  if (window.supabase) supaPublic = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+} catch (e) { /* si falla, la landing sigue funcionando igual por WhatsApp */ }
+
+// Vendedor resuelto desde el link personalizado (?v=usuario), si corresponde.
+let vendedorInfo = null;
+
+// Precios por tramo de cantidad (bidones de 5 Lts), según flyer oficial
 const PRICING = {
   rm: {
     label: "Región Metropolitana",
@@ -486,12 +739,19 @@ const PRICING = {
     ]
   }
 };
+// Estos valores son el "respaldo" que se usa si todavía no cargó (o falló)
+// la conexión a la base de datos — así la landing nunca se queda en blanco.
+// En cuanto carga el catálogo real (productos + producto_tramos), estos se
+// sobrescriben automáticamente con lo que el admin haya configurado.
 let GRANADINA_PRICE = 22000;
+let GRANADINA_NOMBRE = "Granadina 700cc";
+let GRANADINA_UNIDAD_TEXTO = "Display de 12 unidades";
+let PIPENO5L_NOMBRE = "Pipeño 5 Lts";
 
-// Precio de despacho por comuna: lo administra el admin en la pestaña
-// Comunas/Rutas (columna "Despacho ($)") y se carga en vivo más abajo, en
-// cargarComunasPublicas() — nada hardcodeado acá. Si una comuna todavía no
-// tiene precio cargado (0 o no encontrada), se muestra un valor referencial.
+// El valor de despacho por comuna ahora viene de la base de datos (editable
+// desde el panel admin) — ver buscarComuna()/calcularDespacho() más abajo.
+// Este es solo el valor referencial de respaldo cuando aún no se sabe el
+// precio exacto de una comuna.
 const DEFAULT_DELIVERY_RM = 3000;
 
 const FLYERS = {
@@ -501,78 +761,23 @@ const FLYERS = {
 // ==========================================================================
 
 let currentRegion = "rm";
+let comunasCache = [];
+let bannerDeliveryConfig = null;
+let countdownTimer = null;
+// Valores de respaldo embebidos para productos "fijo" nuevos (además de
+// Granadina, que ya tiene su propia sección fija en el HTML): si Supabase no
+// responde, o el admin todavía no corrió la migración que crea la tabla
+// "productos" en su proyecto real, esta lista es lo que se muestra — así
+// nunca desaparece un producto de la página por un problema de conexión o
+// de que falte un paso de instalación. En cuanto Supabase responde bien, se
+// reemplaza por el catálogo real (ver cargarProductosPublico más abajo).
+let productosDinamicos = [
+  { id: "respaldo-pipeno-2l", nombre: "Pipeño 2 Litros", unidad_venta: "display", descripcion_unidad: "Display de 6 unidades", tipo_precio: "fijo", precio_fijo: 12000, orden: 3 }
+];
+const qtyExtra = {}; // producto_id -> cantidad ingresada para cada producto dinámico
 
 function normalize(str){
   return (str || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim();
-}
-
-// Comuna -> día de reparto, cargado desde el sistema (admin.html lo administra
-// en la pestaña "Comunas / Rutas"). Si cambia allá, se refleja acá solo con
-// recargar la página — no hay nada hardcodeado.
-const DIA_LABEL_PUBLICO = { lunes:"lunes", martes:"martes", miercoles:"miércoles", jueves:"jueves", viernes:"viernes", sabado:"sábado", domingo:"domingo" };
-let COMUNAS_DIA = {};
-let COMUNAS_DESPACHO = {};
-
-async function cargarComunasPublicas(){
-  try{
-    const resp = await fetch("/api/comunas-publicas");
-    const data = await resp.json();
-    if(!Array.isArray(data)) return;
-    const lista = document.getElementById("comunaList");
-    data.forEach(c=>{
-      COMUNAS_DIA[normalize(c.comuna)] = c.dia_reparto;
-      COMUNAS_DESPACHO[normalize(c.comuna)] = c.precio_despacho || 0;
-      const opt = document.createElement("option");
-      opt.value = c.comuna;
-      lista.appendChild(opt);
-    });
-    updateAll();
-  }catch(e){ /* si falla, el formulario sigue funcionando igual, solo sin este dato extra */ }
-}
-
-async function cargarVendedoresPublicos(){
-  try{
-    const resp = await fetch("/api/vendedores-publicos");
-    const data = await resp.json();
-    if(!Array.isArray(data)) return;
-    const select = document.getElementById("vendedorAtiende");
-    data.forEach(v=>{
-      const opt = document.createElement("option");
-      opt.value = v.id;
-      opt.textContent = v.nombre_completo;
-      select.appendChild(opt);
-    });
-  }catch(e){ /* opcional, no bloquea el formulario si falla */ }
-}
-
-// Carga los precios vigentes (los que el admin haya configurado) — si
-// falla, la página sigue funcionando con los precios de respaldo de arriba.
-function aplicarPreciosLocal(datos){
-  if(datos && datos.pricing_tiers){
-    ["rm","vr"].forEach(key=>{
-      const region = datos.pricing_tiers[key];
-      if(!region || !Array.isArray(region.tiers)) return;
-      PRICING[key].min = region.min;
-      PRICING[key].tiers = region.tiers.map(t=>({
-        min: t.min,
-        max: (t.max === null || t.max === undefined) ? Infinity : t.max,
-        price: t.price
-      }));
-    });
-  }
-  if(datos && typeof datos.precio_granadina === "number"){
-    GRANADINA_PRICE = datos.precio_granadina;
-  }
-}
-
-async function cargarPreciosPublicos(){
-  try{
-    const resp = await fetch("/api/precios-publicos");
-    const datos = await resp.json();
-    aplicarPreciosLocal(datos);
-    renderTiers();
-    updateAll();
-  }catch(e){ /* si falla, sigue con los precios de respaldo */ }
 }
 
 function money(n){
@@ -588,6 +793,7 @@ function setRegion(region){
   document.getElementById("deliveryInfoVR").style.display = region==="vr" ? "block":"none";
   document.getElementById("regionDisplay").value = PRICING[region].label;
   renderTiers();
+  renderComunasPanel();
   updateAll();
 }
 
@@ -624,6 +830,76 @@ function stepQty(which, delta){
   updateAll();
 }
 
+// Busca en el catálogo cargado desde el admin el registro de una comuna
+// (día de reparto, precio de despacho, si está disponible o no).
+function buscarComuna(comunaRaw){
+  const key = normalize(comunaRaw);
+  if(!key) return null;
+  return comunasCache.find(c => normalize(c.comuna) === key) || null;
+}
+
+function bannerVigente(){
+  if(!bannerDeliveryConfig || !bannerDeliveryConfig.activo) return false;
+  if(bannerDeliveryConfig.valido_hasta){
+    const limite = new Date(bannerDeliveryConfig.valido_hasta + "T23:59:59");
+    if(new Date() > limite) return false;
+  }
+  return true;
+}
+
+function despachoGratisVigente(){
+  return bannerVigente() && bannerDeliveryConfig.tipo === "gratis";
+}
+
+// Calcula el precio y el texto de despacho para una región/comuna dadas.
+// Centralizado acá para que updateAll() (lo que ve el cliente mientras
+// arma el pedido) y submitOrder() (lo que se envía) nunca queden
+// desincronizados.
+function calcularDespacho(regionKey, comunaRaw){
+  if(regionKey !== "rm"){
+    return { price: 0, text: "Despacho V Región: se coordina semanalmente contigo." };
+  }
+  const comunaKey = normalize(comunaRaw);
+  if(despachoGratisVigente()){
+    return {
+      price: 0,
+      text: comunaKey
+        ? `🎉 Despacho GRATIS a ${comunaRaw} (promoción por tiempo limitado)`
+        : "🎉 Despacho GRATIS por tiempo limitado en toda la Región Metropolitana."
+    };
+  }
+  if(!comunaKey){
+    return { price: 0, text: "Ingresa tu comuna para estimar el despacho." };
+  }
+  const info = buscarComuna(comunaRaw);
+  if(info && info.activa === false){
+    return { price: 0, text: `Por ahora no estamos despachando a ${comunaRaw}. Escríbenos por WhatsApp para coordinar.` };
+  }
+  if(info && info.precio_despacho != null){
+    return { price: info.precio_despacho, text: `Despacho a ${comunaRaw}: ${money(info.precio_despacho)}` };
+  }
+  return { price: DEFAULT_DELIVERY_RM, text: `Despacho referencial: ${money(DEFAULT_DELIVERY_RM)} (a confirmar para ${comunaRaw})` };
+}
+
+// Calcula cantidades/subtotales de los productos agregados dinámicamente
+// desde el admin (cualquier producto "fijo" que no sea la Granadina), y
+// actualiza sus subtotales en pantalla.
+function calcularProductosExtra(){
+  let subtotal = 0;
+  const lineas = [];
+  productosDinamicos.forEach(p => {
+    const qty = qtyExtra[p.id] || 0;
+    if(qty > 0){
+      const sub = qty * p.precio_fijo;
+      subtotal += sub;
+      lineas.push({ nombre: p.nombre, unidad: p.unidad_venta, cantidad: qty, precio_unitario: p.precio_fijo, subtotal: sub });
+    }
+    const subtotalEl = document.getElementById("subtotalExtra_" + p.id);
+    if(subtotalEl) subtotalEl.textContent = money(qty * p.precio_fijo);
+  });
+  return { subtotal, lineas };
+}
+
 function updateAll(){
   const qtyPipeno = parseInt(document.getElementById("qtyPipeno").value||"0",10);
   const qtyGranadina = parseInt(document.getElementById("qtyGranadina").value||"0",10);
@@ -652,49 +928,342 @@ function updateAll(){
   const granadinaSubtotal = qtyGranadina * GRANADINA_PRICE;
   document.getElementById("granadinaSubtotal").textContent = money(granadinaSubtotal);
 
+  const extra = calcularProductosExtra();
+
   // despacho
   const comunaRaw = document.getElementById("comuna").value;
-  const comunaKey = normalize(comunaRaw);
-  let deliveryPrice = null;
-  let deliveryText = "";
-  if(currentRegion === "rm"){
-    const precioComuna = comunaKey ? COMUNAS_DESPACHO[comunaKey] : undefined;
-    if(comunaKey && precioComuna){
-      deliveryPrice = precioComuna;
-      deliveryText = `Despacho a ${comunaRaw}: ${money(deliveryPrice)}`;
-    } else if(comunaKey){
-      deliveryText = `Despacho referencial: ${money(DEFAULT_DELIVERY_RM)} (a confirmar para ${comunaRaw})`;
-    } else {
-      deliveryText = "Ingresa tu comuna para estimar el despacho.";
-    }
-  } else {
-    deliveryText = "Despacho V Región: se coordina semanalmente contigo.";
-  }
-  document.getElementById("deliveryPriceShown").textContent = deliveryText;
+  const despacho = calcularDespacho(currentRegion, comunaRaw);
+  document.getElementById("deliveryPriceShown").textContent = despacho.text;
 
-  const diaInfo = document.getElementById("diaRepartoInfo");
-  const diaReparto = comunaKey ? COMUNAS_DIA[comunaKey] : null;
-  if(!comunaKey){
-    diaInfo.textContent = "";
-  } else if(diaReparto && DIA_LABEL_PUBLICO[diaReparto]){
-    diaInfo.textContent = `📅 Repartimos en ${comunaRaw} los días ${DIA_LABEL_PUBLICO[diaReparto]}.`;
-  } else {
-    diaInfo.textContent = `Día de reparto para ${comunaRaw}: a confirmar contigo.`;
-  }
-
-  const total = pipenoSubtotal + granadinaSubtotal + (deliveryPrice || 0);
+  const total = pipenoSubtotal + granadinaSubtotal + extra.subtotal + despacho.price;
 
   const summary = document.getElementById("summaryBox");
   summary.innerHTML = "";
   if(qtyPipeno>0){
-    summary.innerHTML += `<div>Pipeño 5L: ${qtyPipeno} bidones x ${money(unitPrice)} = ${money(pipenoSubtotal)}</div>`;
+    summary.innerHTML += `<div>${PIPENO5L_NOMBRE}: ${qtyPipeno} bidones x ${money(unitPrice)} = ${money(pipenoSubtotal)}</div>`;
   }
   if(qtyGranadina>0){
-    summary.innerHTML += `<div>Granadina: ${qtyGranadina} display(s) x ${money(GRANADINA_PRICE)} = ${money(granadinaSubtotal)}</div>`;
+    summary.innerHTML += `<div>${GRANADINA_NOMBRE}: ${qtyGranadina} display(s) x ${money(GRANADINA_PRICE)} = ${money(granadinaSubtotal)}</div>`;
   }
-  summary.innerHTML += `<div>${deliveryText}</div>`;
+  extra.lineas.forEach(l => {
+    summary.innerHTML += `<div>${l.nombre}: ${l.cantidad} ${l.unidad}(s) x ${money(l.precio_unitario)} = ${money(l.subtotal)}</div>`;
+  });
+  summary.innerHTML += `<div>${despacho.text}</div>`;
 
   document.getElementById("totalAmount").textContent = money(total);
+}
+
+// ===================== Catálogo dinámico de productos =====================
+
+function renderProductosExtra(){
+  const wrap = document.getElementById("productosExtraWrap");
+  wrap.innerHTML = "";
+  productosDinamicos.forEach(p => {
+    if(!(p.id in qtyExtra)) qtyExtra[p.id] = 0;
+    const section = document.createElement("section");
+    section.className = "product";
+    section.innerHTML = `
+      <h2><svg class="icon" viewBox="0 0 24 24"><path d="M7 3h10l-1.3 8a3.7 3.7 0 0 1-7.4 0L7 3z"/><line x1="12" y1="14" x2="12" y2="20"/><line x1="8" y1="21" x2="16" y2="21"/></svg>${p.nombre}</h2>
+      <p class="subtotal-line">${p.descripcion_unidad || p.unidad_venta} — ${money(p.precio_fijo)} c/u</p>
+      <label>Cantidad de ${p.unidad_venta}s</label>
+      <div class="stepper">
+        <button type="button" onclick="stepExtra('${p.id}',-1)">−</button>
+        <input type="number" min="0" value="${qtyExtra[p.id]}" id="qtyExtra_${p.id}" oninput="onExtraInput('${p.id}', this.value)">
+        <button type="button" onclick="stepExtra('${p.id}',1)">+</button>
+      </div>
+      <p class="subtotal-line">Subtotal: <b id="subtotalExtra_${p.id}">$0</b></p>
+    `;
+    wrap.appendChild(section);
+  });
+}
+
+function stepExtra(id, delta){
+  const el = document.getElementById("qtyExtra_" + id);
+  let v = parseInt(el.value||"0",10) + delta;
+  if(v<0) v = 0;
+  el.value = v;
+  onExtraInput(id, v);
+}
+
+function onExtraInput(id, value){
+  qtyExtra[id] = parseInt(value||"0",10);
+  updateAll();
+}
+
+async function cargarProductosPublico(){
+  if(!supaPublic) return; // se queda con los valores de respaldo embebidos
+  try{
+    const { data: productos, error } = await supaPublic
+      .from("productos")
+      .select("id, nombre, unidad_venta, descripcion_unidad, tipo_precio, precio_fijo, orden")
+      .eq("activo", true)
+      .order("orden", { ascending: true });
+    if(error || !productos || productos.length === 0) return;
+
+    const { data: tramos } = await supaPublic
+      .from("producto_tramos")
+      .select("producto_id, region, cantidad_min, cantidad_max, precio_unitario");
+
+    const productoTramos = productos.find(p => p.tipo_precio === "tramos");
+    if(productoTramos && tramos && tramos.length){
+      ["rm","vr"].forEach(region => {
+        const tramosRegion = tramos
+          .filter(t => t.producto_id === productoTramos.id && t.region === region)
+          .map(t => ({ min: t.cantidad_min, max: t.cantidad_max === null ? Infinity : t.cantidad_max, price: t.precio_unitario }))
+          .sort((a,b) => a.min - b.min);
+        if(tramosRegion.length){
+          PRICING[region].tiers = tramosRegion;
+          PRICING[region].min = Math.min(...tramosRegion.map(t => t.min));
+        }
+      });
+      PIPENO5L_NOMBRE = productoTramos.nombre;
+    }
+
+    const granadina = productos.find(p => p.tipo_precio === "fijo" && normalize(p.nombre).includes("granadina"));
+    if(granadina && granadina.precio_fijo != null){
+      GRANADINA_PRICE = granadina.precio_fijo;
+      GRANADINA_NOMBRE = granadina.nombre;
+      GRANADINA_UNIDAD_TEXTO = granadina.descripcion_unidad || "Display de 12 unidades";
+    }
+
+    productosDinamicos = productos.filter(p =>
+      p.tipo_precio === "fijo" && !(granadina && p.id === granadina.id)
+    );
+  }catch(e){ /* si falla, se usan los valores de respaldo embebidos */ }
+}
+
+// ===================== Banner de delivery (gratis / con costo) =====================
+
+async function cargarBannerDelivery(){
+  if(!supaPublic) return;
+  try{
+    const { data, error } = await supaPublic
+      .from("configuraciones")
+      .select("valor")
+      .eq("clave", "banner_delivery")
+      .single();
+    if(!error && data && data.valor){
+      bannerDeliveryConfig = data.valor;
+    }
+  }catch(e){ /* sin banner si falla — la landing sigue funcionando igual */ }
+}
+
+// Foto principal y flyers de precio: si el admin subió una imagen nueva
+// desde el panel, se reemplaza acá; si no hay nada guardado (o falla la
+// consulta), se sigue viendo la imagen de respaldo que ya viene incluida
+// en la página — nunca queda una sección sin imagen.
+async function cargarImagenesLandingPublico(){
+  if(!supaPublic) return;
+  try{
+    const { data, error } = await supaPublic
+      .from("configuraciones")
+      .select("valor")
+      .eq("clave", "imagenes_landing")
+      .single();
+    if(error || !data || !data.valor) return;
+    const v = data.valor;
+    if(v.hero_base64) document.getElementById("heroImg").src = v.hero_base64;
+    if(v.flyer_rm_base64) FLYERS.rm = v.flyer_rm_base64;
+    if(v.flyer_vr_base64) FLYERS.vr = v.flyer_vr_base64;
+  }catch(e){ /* si falla, se usan las imagenes de respaldo embebidas */ }
+}
+
+function actualizarTextoDespachoRegionRM(){
+  const el = document.getElementById("deliveryInfoRM");
+  if(despachoGratisVigente()){
+    el.innerHTML = "🎉 <b>Despacho GRATIS por tiempo limitado</b> para pedidos dentro de la Región Metropolitana. Después de la promoción, el despacho vuelve a variar según tu comuna.";
+  } else {
+    el.textContent = "Región Metropolitana: despacho desde $3.000 (el valor varía según la comuna — es referencial, lo confirmamos contigo antes de despachar).";
+  }
+}
+
+function actualizarBannerUI(){
+  const el = document.getElementById("deliveryBanner");
+  const imgEl = document.getElementById("bannerImagen");
+  if(!bannerVigente()){
+    el.style.display = "none";
+    actualizarTextoDespachoRegionRM();
+    return;
+  }
+  el.style.display = "flex";
+  el.classList.toggle("tipo-pago", bannerDeliveryConfig.tipo === "pago");
+  document.getElementById("bannerTitulo").textContent = bannerDeliveryConfig.titulo || "";
+  document.getElementById("bannerMensaje").textContent = bannerDeliveryConfig.mensaje || "";
+  if(bannerDeliveryConfig.imagen_base64){
+    imgEl.src = bannerDeliveryConfig.imagen_base64;
+    imgEl.style.display = "block";
+  } else {
+    imgEl.style.display = "none";
+  }
+  const countdownEl = document.getElementById("bannerCountdown");
+  if(bannerDeliveryConfig.valido_hasta){
+    countdownEl.style.display = "inline-block";
+    actualizarCountdown();
+  } else {
+    countdownEl.style.display = "none";
+  }
+  actualizarTextoDespachoRegionRM();
+}
+
+function actualizarCountdown(){
+  const countdownEl = document.getElementById("bannerCountdown");
+  if(!bannerDeliveryConfig || !bannerDeliveryConfig.valido_hasta) return;
+  const limite = new Date(bannerDeliveryConfig.valido_hasta + "T23:59:59");
+  const diffMs = limite - new Date();
+  if(diffMs <= 0){
+    if(countdownTimer) clearInterval(countdownTimer);
+    actualizarBannerUI();
+    updateAll();
+    return;
+  }
+  const dias = Math.floor(diffMs / 86400000);
+  const horas = Math.floor((diffMs % 86400000) / 3600000);
+  const minutos = Math.floor((diffMs % 3600000) / 60000);
+  const segundos = Math.floor((diffMs % 60000) / 1000);
+  countdownEl.textContent = `⏳ Termina en: ${dias}d ${horas}h ${minutos}m ${segundos}s`;
+}
+
+function iniciarCountdownBanner(){
+  if(countdownTimer) clearInterval(countdownTimer);
+  if(bannerVigente() && bannerDeliveryConfig.valido_hasta){
+    countdownTimer = setInterval(actualizarCountdown, 1000);
+  }
+}
+
+function abrirPanelComunas(){
+  document.getElementById("comunasPanel").classList.add("open");
+  document.getElementById("comunasOverlay").classList.add("open");
+}
+function cerrarPanelComunas(){
+  document.getElementById("comunasPanel").classList.remove("open");
+  document.getElementById("comunasOverlay").classList.remove("open");
+}
+
+let diasEspecialesPublicoCache = [];
+
+async function cargarComunasPublico(){
+  const wrapDisponibles = document.getElementById("comunasDisponiblesWrap");
+  if(!supaPublic){
+    wrapDisponibles.innerHTML = '<p class="empty-comunas">No se pudo cargar el listado de comunas. Escríbenos por WhatsApp y te confirmamos.</p>';
+    return;
+  }
+  const { data, error } = await supaPublic
+    .from("comunas_rutas")
+    .select("comuna, region, dia_reparto, activa, precio_despacho")
+    .order("comuna", { ascending: true });
+
+  if(error || !data){
+    wrapDisponibles.innerHTML = '<p class="empty-comunas">No se pudo cargar el listado de comunas. Escríbenos por WhatsApp y te confirmamos.</p>';
+    return;
+  }
+
+  comunasCache = data;
+  renderComunasPanel();
+}
+
+async function cargarDiasEspecialesPublico(){
+  if(!supaPublic) return;
+  try{
+    const hoyStr = new Date().toISOString().slice(0,10);
+    const { data, error } = await supaPublic
+      .from("dias_especiales_reparto")
+      .select("fecha, comuna, nota, activo")
+      .eq("activo", true)
+      .gte("fecha", hoyStr)
+      .order("fecha", { ascending: true });
+    if(!error && data) diasEspecialesPublicoCache = data;
+  }catch(e){ /* si falla, simplemente no se muestran dias especiales */ }
+}
+
+// Repinta el panel de "Zonas de reparto" filtrado según la región elegida
+// (Región Metropolitana o V Región) — comunas disponibles, no disponibles,
+// con el precio de despacho de cada una, y los días especiales próximos.
+// Arma el HTML de "comunas agrupadas por día + días especiales" para la
+// región actual — lo comparten el resumen visible de entrada y el panel
+// lateral completo, para que nunca queden desincronizados entre sí.
+function construirHtmlZonasReparto(comunasRegion){
+  const DIA_LABEL = { lunes:"Lunes", martes:"Martes", miercoles:"Miércoles", jueves:"Jueves", viernes:"Viernes", sin_asignar:"Por confirmar" };
+  const disponibles = comunasRegion.filter(c => c.activa !== false);
+
+  const textoComuna = (c) => {
+    const precio = c.precio_despacho != null ? money(c.precio_despacho) : "referencial";
+    return `${c.comuna} (${precio})`;
+  };
+
+  const porDia = {};
+  disponibles.forEach(c => {
+    const key = c.dia_reparto || "sin_asignar";
+    (porDia[key] = porDia[key] || []).push(c);
+  });
+
+  let html = "";
+  ["lunes","martes","miercoles","jueves","viernes","sin_asignar"].forEach(dia => {
+    if(!porDia[dia] || porDia[dia].length === 0) return;
+    html += `<div class="comunas-dia-group"><h4>${DIA_LABEL[dia]}</h4><p>${porDia[dia].map(textoComuna).join(", ")}</p></div>`;
+  });
+
+  // Días especiales próximos que aplican a esta región: los "globales" (sin
+  // comuna) siempre se muestran, y los de una comuna puntual solo si esa
+  // comuna pertenece a la región que se está mostrando ahora mismo.
+  const especialesRegion = diasEspecialesPublicoCache.filter(d =>
+    !d.comuna || comunasRegion.some(c => normalize(c.comuna) === normalize(d.comuna))
+  );
+  if(especialesRegion.length){
+    html += `<div class="comunas-especiales-group"><h4>📅 Días especiales de reparto</h4>` +
+      especialesRegion.map(d => `<p><b>${d.fecha}</b>${d.comuna ? " — " + d.comuna : " — todas las comunas"}${d.nota ? `: ${d.nota}` : ""}</p>`).join("") +
+      `</div>`;
+  }
+
+  return html;
+}
+
+// Panel lateral completo (se abre tocando la pestaña "Zonas de reparto"):
+// además del resumen por día, muestra la lista de comunas no disponibles.
+function renderComunasPanel(){
+  const wrapDisponibles = document.getElementById("comunasDisponiblesWrap");
+  if(!comunasCache.length) return;
+
+  const regionLabel = PRICING[currentRegion].label;
+  const comunasRegion = comunasCache.filter(c => c.region === regionLabel);
+  const noDisponibles = comunasRegion.filter(c => c.activa === false);
+
+  const html = `<p class="comunas-region-actual">Mostrando: <b>${regionLabel}</b></p>` + construirHtmlZonasReparto(comunasRegion);
+  wrapDisponibles.innerHTML = html || '<p class="empty-comunas">Aún no hay comunas cargadas para esta región — escríbenos por WhatsApp.</p>';
+
+  const seccionNoDisp = document.getElementById("comunasNoDisponiblesSection");
+  if(noDisponibles.length){
+    seccionNoDisp.style.display = "block";
+    document.getElementById("comunasNoDisponiblesWrap").textContent = noDisponibles.map(c => c.comuna).join(", ");
+  } else {
+    seccionNoDisp.style.display = "none";
+  }
+
+  renderZonasResumenInline(comunasRegion);
+}
+
+// Resumen visible de entrada (sin tener que abrir el panel lateral) —
+// mismo contenido de comunas/precios/días especiales, en una tarjeta que no
+// bloquea el resto de la página.
+function renderZonasResumenInline(comunasRegion){
+  const wrap = document.getElementById("zonasResumenInline");
+  if(!wrap) return;
+  const regionLabel = PRICING[currentRegion].label;
+  const html = construirHtmlZonasReparto(comunasRegion);
+  wrap.innerHTML = `<h3>📍 Zonas y precios de despacho — ${regionLabel}</h3>` +
+    (html || '<p class="empty-comunas">Aún no hay comunas cargadas para esta región — escríbenos por WhatsApp.</p>') +
+    `<button type="button" class="ver-detalle-zonas" onclick="abrirPanelComunas()">Ver todas las comunas y detalle completo →</button>`;
+}
+
+async function resolverVendedorDesdeLink(){
+  const params = new URLSearchParams(window.location.search);
+  const v = params.get("v");
+  if(!v || !supaPublic) return;
+  try{
+    const { data, error } = await supaPublic.rpc("vendedor_publico_por_username", { p_username: v });
+    if(!error && data && data.length){
+      vendedorInfo = data[0];
+    }
+  }catch(e){ /* si falla, el pedido simplemente llega al WhatsApp principal */ }
 }
 
 function openLightbox(){
@@ -721,11 +1290,14 @@ function buildMessage(data){
   lines.push("");
   lines.push("Pedido:");
   if(data.qtyPipeno>0){
-    lines.push(`- Pipeño 5L: ${data.qtyPipeno} bidones x ${money(data.unitPrice)} = ${money(data.pipenoSubtotal)}`);
+    lines.push(`- ${PIPENO5L_NOMBRE}: ${data.qtyPipeno} bidones x ${money(data.unitPrice)} = ${money(data.pipenoSubtotal)}`);
   }
   if(data.qtyGranadina>0){
-    lines.push(`- Granadina 750cc: ${data.qtyGranadina} display(s) x ${money(GRANADINA_PRICE)} = ${money(data.granadinaSubtotal)}`);
+    lines.push(`- ${GRANADINA_NOMBRE}: ${data.qtyGranadina} display(s) x ${money(GRANADINA_PRICE)} = ${money(data.granadinaSubtotal)}`);
   }
+  data.extraLineas.forEach(l => {
+    lines.push(`- ${l.nombre}: ${l.cantidad} ${l.unidad}(s) x ${money(l.precio_unitario)} = ${money(l.subtotal)}`);
+  });
   lines.push(`- ${data.deliveryText}`);
   lines.push("");
   lines.push(`*TOTAL ESTIMADO: ${money(data.total)}*`);
@@ -753,9 +1325,12 @@ async function submitOrder(){
     status.textContent = "Por favor completa nombre, teléfono, dirección y comuna.";
     return;
   }
-  if(qtyPipeno===0 && qtyGranadina===0){
+
+  const extra = calcularProductosExtra();
+  const totalUnidades = qtyPipeno + qtyGranadina + extra.lineas.reduce((a,l) => a + l.cantidad, 0);
+  if(totalUnidades === 0){
     status.style.color = "#D52B1E";
-    status.textContent = "Selecciona al menos una cantidad de Pipeño o Granadina.";
+    status.textContent = "Selecciona al menos una cantidad de algún producto.";
     return;
   }
 
@@ -764,58 +1339,118 @@ async function submitOrder(){
   const unitPrice = tier ? tier.price : 0;
   const pipenoSubtotal = qtyPipeno * unitPrice;
   const granadinaSubtotal = qtyGranadina * GRANADINA_PRICE;
-  const comunaKey = normalize(comuna);
-  let deliveryPrice = 0;
-  let deliveryText = "";
-  if(currentRegion==="rm"){
-    const precioComuna = COMUNAS_DESPACHO[comunaKey];
-    if(precioComuna){
-      deliveryPrice = precioComuna;
-      deliveryText = `Despacho a ${comuna}: ${money(deliveryPrice)}`;
-    } else {
-      deliveryText = `Despacho referencial: ${money(DEFAULT_DELIVERY_RM)} (a confirmar)`;
-    }
-  } else {
-    deliveryText = "Despacho V Región: se coordina semanalmente contigo.";
-  }
-  const total = pipenoSubtotal + granadinaSubtotal + deliveryPrice;
+  const despacho = calcularDespacho(currentRegion, comuna);
+  const total = pipenoSubtotal + granadinaSubtotal + extra.subtotal + despacho.price;
 
   const data = {
     nombre, telefono, direccion, comuna,
     regionLabel: region.label,
     qtyPipeno, qtyGranadina, unitPrice,
-    pipenoSubtotal, granadinaSubtotal, deliveryText, total, notas
+    pipenoSubtotal, granadinaSubtotal,
+    extraLineas: extra.lineas,
+    deliveryText: despacho.text, total, notas
   };
 
-  // Registro automático del pedido en el sistema (además de WhatsApp). Si
-  // falla por lo que sea, no bloquea el envío por WhatsApp — el pedido de
-  // todas formas le llega al vendedor por ese canal.
-  try{
-    await fetch(FORM_ENDPOINT, {
-      method: "POST",
-      headers: {"Accept":"application/json","Content-Type":"application/json"},
-      body: JSON.stringify({
-        nombre, telefono, direccion, comuna,
-        regionLabel: region.label,
-        qtyPipeno, qtyGranadina,
-        notas,
-        vendedorId: document.getElementById("vendedorAtiende").value || null
-      })
-    });
-  }catch(e){ /* no bloquea el envío por WhatsApp si falla */ }
+  // Intento de registro automático en planilla (Formspree), solo si se
+  // configuró un endpoint real. No es la vía principal — ver el guardado
+  // directo en la base de datos justo abajo.
+  if(FORM_ENDPOINT.indexOf("TU_ID_AQUI") === -1){
+    try{
+      await fetch(FORM_ENDPOINT, {
+        method: "POST",
+        headers: {"Accept":"application/json","Content-Type":"application/json"},
+        body: JSON.stringify({
+          nombre, telefono, direccion, comuna,
+          region: region.label,
+          cantidad_pipeno: qtyPipeno,
+          precio_unitario_pipeno: unitPrice,
+          cantidad_granadina: qtyGranadina,
+          total_estimado: total,
+          notas
+        })
+      });
+    }catch(e){ /* no bloquea el envío por WhatsApp si falla */ }
+  }
+
+  // Guardado directo en la base de datos del sistema (queda visible para el
+  // administrador y, si el link trae "?v=usuario", atribuido a ese vendedor).
+  // Es "best effort": si falla (sin internet, etc.) el pedido igual se
+  // envía por WhatsApp normalmente.
+  if(supaPublic){
+    try{
+      // Best-effort: toma el primer número que aparece en la dirección (el
+      // número de calle suele ir justo después del nombre de la calle, antes
+      // de cualquier "depto N"). El vendedor/admin puede corregirlo después
+      // si el cliente escribió la dirección en un formato distinto.
+      const numeroMatch = direccion.match(/\d+/);
+      const numeroExtraido = numeroMatch ? numeroMatch[0] : "S/N";
+
+      const detalleProductos = [];
+      if(qtyPipeno > 0){
+        detalleProductos.push({ nombre: PIPENO5L_NOMBRE, unidad: "bidón", cantidad: qtyPipeno, precio_unitario: unitPrice, subtotal: pipenoSubtotal });
+      }
+      if(qtyGranadina > 0){
+        detalleProductos.push({ nombre: GRANADINA_NOMBRE, unidad: "display", cantidad: qtyGranadina, precio_unitario: GRANADINA_PRICE, subtotal: granadinaSubtotal });
+      }
+      extra.lineas.forEach(l => detalleProductos.push(l));
+
+      const payloadPedido = {
+        nombre_cliente: nombre,
+        telefono,
+        direccion,
+        numero: numeroExtraido,
+        comuna,
+        region: region.label,
+        cantidad_pipeno: qtyPipeno,
+        precio_unitario_pipeno: unitPrice,
+        cantidad_granadina: qtyGranadina,
+        detalle_productos: detalleProductos,
+        observaciones: notas || null,
+        total
+      };
+      if(vendedorInfo && vendedorInfo.id){
+        payloadPedido.vendedor_id = vendedorInfo.id;
+      }
+      await supaPublic.from("pedidos").insert(payloadPedido);
+    }catch(e){ /* no bloquea el envío por WhatsApp si falla */ }
+  }
 
   const msg = buildMessage(data);
-  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank");
+  const telefonoDestino = (vendedorInfo && vendedorInfo.telefono_whatsapp)
+    ? vendedorInfo.telefono_whatsapp.replace(/\D/g, "")
+    : WHATSAPP_NUMBER;
+  window.open(`https://wa.me/${telefonoDestino}?text=${encodeURIComponent(msg)}`, "_blank");
 
   status.style.color = "#1e7d32";
   status.textContent = "¡Pedido preparado! Se abrió WhatsApp — solo debes tocar enviar para confirmar tu pedido.";
 }
 
 // inicialización
-setRegion("rm");
-cargarComunasPublicas();
-cargarVendedoresPublicos();
-cargarPreciosPublicos();
+setRegion("rm"); // primero se pinta con los valores de respaldo (sin esperar red)
+renderProductosExtra(); // idem: pinta el catálogo de respaldo antes de esperar la red
+(async () => {
+  await Promise.all([
+    cargarComunasPublico(),
+    cargarDiasEspecialesPublico(),
+    cargarBannerDelivery(),
+    cargarProductosPublico(),
+    cargarImagenesLandingPublico(),
+    resolverVendedorDesdeLink()
+  ]);
+  // Con los datos reales ya cargados, se vuelve a pintar todo lo que
+  // depende de ellos (precios, nombres de producto, banner, despacho,
+  // flyer de precios de la región actual, y el panel de zonas de reparto
+  // con los días especiales que ya llegaron).
+  renderTiers();
+  renderProductosExtra();
+  renderComunasPanel();
+  document.getElementById("flyerImg").src = FLYERS[currentRegion];
+  document.getElementById("granadinaNombreTexto").textContent = GRANADINA_NOMBRE;
+  document.getElementById("granadinaUnidadTexto").textContent = `${GRANADINA_UNIDAD_TEXTO} — ${money(GRANADINA_PRICE)} c/u`;
+  actualizarBannerUI();
+  iniciarCountdownBanner();
+  updateAll();
+})();
 </script>
 
 </body>

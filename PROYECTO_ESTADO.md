@@ -4,245 +4,6 @@ Este archivo es un resumen del proyecto para que una sesión nueva de Claude
 Code (u otro desarrollador) pueda continuar sin perder contexto. Léelo
 completo antes de tocar código.
 
-## 🔴 Pendiente urgente: falta correr una migración SQL más (precios de producto)
-
-Se hizo un cambio grande: **todos los precios (despacho, Pipeño por tramo,
-Granadina) ahora se administran desde `admin.html` y se leen en vivo desde
-la base de datos** — en vez de estar fijos en el código. Antes, si el admin
-cambiaba un precio, no se reflejaba en la landing pública ni en el
-vendedor; ahora sí, todo lee de la misma fuente (`configuraciones` para
-Pipeño/Granadina, `comunas_rutas.precio_despacho` para despacho).
-
-Falta agregar la fila `pricing_tiers` a `configuraciones` (el código para
-usarla ya está desplegado, pero sin esta fila el sistema simplemente sigue
-usando los precios de respaldo del código — no se rompe nada, pero el
-admin no puede cambiarlos hasta correr esto):
-
-**Correr esto una sola vez en Supabase → SQL Editor → Run** (en una
-pestaña de consulta nueva, con cuidado de que Chrome no traduzca el SQL —
-ver nota más abajo):
-
-```sql
-insert into public.configuraciones (clave, valor) values
-  ('pricing_tiers', '{"rm":{"min":12,"tiers":[{"min":12,"max":19,"price":3800},{"min":20,"max":39,"price":3700},{"min":40,"max":null,"price":3600}]},"vr":{"min":20,"tiers":[{"min":20,"max":29,"price":3900},{"min":30,"max":39,"price":3800},{"min":40,"max":null,"price":3600}]}}')
-on conflict (clave) do nothing;
-```
-
-Ya está agregado también al final de `schema.sql`.
-
-### ⚠️ Nota sobre Chrome traduciendo el SQL Editor
-
-Ya pasó una vez en esta sesión: si Chrome tiene la traducción automática
-activada para supabase.com, puede traducir el código SQL a español dentro
-del editor ("alterar la tabla", "agregar columna"...) y eso ya no es SQL
-válido. Antes de correr cualquier SQL nuevo, verificar que se vea en
-inglés/código, o desactivar la traducción para ese sitio.
-
-## ✅ Migraciones anteriores corridas y verificadas (2026-08-03)
-
-- Sábado/domingo + día manual (`pedidos.dia_reparto_manual`): ✅ corrida.
-- Precio de despacho (`comunas_rutas.precio_despacho`): ✅ corrida y
-  verificada en producción. El admin ya puede cargar el precio real de
-  cada comuna en Comunas/Rutas → columna "Despacho ($)" (parten en $0).
-
-## ✅ Estado al 2026-08-03: sistema completo funcionando en producción
-
-Todo lo pendiente de la sesión anterior quedó resuelto y **verificado de
-punta a punta contra el Supabase real, no un mock**:
-
-- **Logo real** de "Distribuidora El Pelao Erasmo" agregado en
-  `assets/logo.jpeg` y wireado en `index.html`, `login.html`, y las topbars
-  de `vendedor.html`/`admin.html`. Confirmado visualmente en producción.
-- **`SUPABASE_SERVICE_ROLE_KEY` configurada en Vercel** (el cliente la
-  agregó él mismo en el dashboard, como corresponde — Claude nunca la vio
-  ni la manejó).
-- **Cuentas creadas** con `scripts/crear-cuentas-iniciales.js`: `pedidos-web`
-  (cuenta de sistema para pedidos públicos) + `vendedor1`, `vendedor2`,
-  `vendedor3`. Login de `vendedor1` verificado en producción: entra,
-  redirige a `vendedor.html`, carga el formulario, sin errores de consola.
-- **`api/public-order.js` verificado en producción**: un pedido de prueba
-  enviado por curl quedó registrado correctamente (`{"ok":true}`).
-
-### 🔧 Un hallazgo importante de esta sesión: el esquema NUNCA se había corrido
-
-A pesar de que la documentación anterior decía "ya está corrido en el
-proyecto real de Supabase", al verificar directamente (consultando la API
-REST con la clave pública) **ninguna tabla existía en la base de datos real**.
-Se corrió `schema.sql` recién en esta sesión, vía SQL Editor de Supabase.
-
-Además, tras correrlo apareció un problema adicional: **los roles
-`anon`/`authenticated`/`service_role` no tenían los permisos base de
-Postgres** (GRANT) para tocar las tablas nuevas — esto es independiente de
-RLS (RLS filtra qué filas, pero antes de eso Postgres exige el permiso base
-de la operación). Sin este GRANT, todo fallaba con "permission denied"
-aunque las políticas de RLS estuvieran perfectas. Se agregó una sección
-nueva al final de `schema.sql` con los `grant` necesarios — **si alguna vez
-se recrea este proyecto desde cero, correr `schema.sql` completo (que ya
-incluye esta sección) debería bastar; no debería repetirse este problema.**
-
-### ✅ Cuenta admin creada y probada — sistema 100% verificado
-
-Se agregó una cuenta `admin` al script `crear-cuentas-iniciales.js` y se
-corrió. **Login de `admin` probado en producción de punta a punta**:
-entra, carga el panel completo, y en la pestaña Resumen se ve en tiempo
-real el pedido de prueba que se mandó por `api/public-order` (Providencia,
-jueves, $45.600, vendedor "Pedidos Web (formulario público)") — confirma
-que todo el flujo público → base de datos → panel admin funciona. La
-pestaña Usuarios también muestra las 5 cuentas correctamente
-(admin, pedidos-web, vendedor1, vendedor2, vendedor3), todas activas.
-
-No queda ningún pendiente técnico conocido. Lo único no probado en vivo es
-"Crear vendedor" desde la UI de `admin.html` (que llama a
-`api/admin-users.js`) y el motor de rutas / exportación a Excel (no
-construidos todavía, ver "Lo que falta por construir").
-
-### Ronda 2 de features (mismo día, después de lo anterior)
-
-1. **Imprimir ruta** en `admin.html` (pestaña Pedidos → botón "🖨️ Imprimir
-   ruta"): abre una hoja lista para imprimir con los pedidos filtrados
-   actualmente, ordenados por comuna y dirección, excluyendo `anulado` y
-   `entregado`. Lógica de filtro/orden verificada con datos de prueba.
-2. **Editar usuarios** en `admin.html` (pestaña Usuarios → botón "Editar"):
-   modal para cambiar el nombre completo (update directo vía RLS) y
-   **restablecer contraseña** (nueva función `api/admin-reset-password.js`,
-   mismo patrón de verificación admin-only que `api/admin-users.js`).
-3. **Día de reparto visible para el cliente en `index.html`**: al escribir
-   la comuna, se muestra "📅 Repartimos en `<comuna>` los días `<día>`",
-   leyendo en vivo desde `comunas_rutas` vía el nuevo endpoint público
-   `api/comunas-publicas.js` (GET, sin login, expone solo comuna/región/día
-   de comunas activas — nada sensible). Si el admin cambia un día en la
-   pestaña Comunas/Rutas, se refleja solo con que el cliente recargue la
-   página — no hay nada hardcodeado en el HTML.
-4. **El cliente puede elegir quién lo atiende**: nuevo campo "¿Quién te
-   está atendiendo? (opcional)" en `index.html`, poblado por el nuevo
-   endpoint público `api/vendedores-publicos.js` (GET, sin login, expone
-   solo id + nombre de vendedores activos, excluyendo la cuenta de sistema
-   `pedidos-web`).
-5. **Pedidos públicos ya NO se asocian a `pedidos-web` por defecto** —
-   ahora quedan asociados a **`vendedor1`** (o al vendedor que el cliente
-   eligió en el punto 4, validado en el servidor contra `perfiles` antes de
-   usarlo). Así siempre hay una persona real haciendo seguimiento de los
-   pedidos web, no una cuenta fantasma. `pedidos-web` se deja creada por si
-   se necesita más adelante, pero ya no es el destino por defecto.
-
-**✅ Verificado en producción real** (no solo local): pedidos de prueba vía
-curl confirmaron que uno sin elegir vendedor quedó en "Vendedor 1" y otro
-eligiendo explícitamente "Vendedor 2" quedó ahí — se vieron correctamente
-reflejados en el Resumen de `admin.html`. El mensaje de día de reparto
-también se probó en `index.html` real con una comuna de la base de datos
-("📅 Repartimos en Providencia los días jueves."), y el selector de
-vendedor carga los nombres reales (incluyendo el rename de "Vendedor 1" a
-un nombre propio, hecho con la función de editar usuario). Sin errores de
-consola en ningún caso.
-
-### Ronda 3 de features (mismo día, pedido explícito del cliente)
-
-1. **Sábado y domingo como día de reparto** — para entregas especiales.
-   ✅ Migración corrida y verificada.
-2. **Fijar manualmente el día de un pedido individual** — en el modal de
-   editar pedido, campo "Día de reparto" con opción "Automático (según
-   comuna)" o un día fijo. Al fijarlo a mano, `dia_reparto_manual = true`
-   y el trigger de la base de datos deja de recalcularlo automáticamente
-   cuando se edite la comuna del pedido. ✅ Migración corrida y verificada.
-3. **"IV Región"** agregada como opción al crear una comuna nueva en la
-   pestaña Comunas/Rutas (sin migración — la columna `region` siempre fue
-   texto libre). **Nota de alcance**: esto es solo para la gestión interna
-   de rutas; el cotizador público (`index.html`) sigue teniendo tramos de
-   precio únicamente para Región Metropolitana y V Región — agregar
-   precios para IV Región es una decisión de negocio (tramos y precios)
-   que no estaba especificada, así que no se tocó `pricing.js`. Avisar si
-   se necesita.
-4. **Exportar a Excel** (pestaña Pedidos → botón "📊 Exportar Excel") — usa
-   SheetJS (CDN) para generar un `.xlsx` con el detalle de los pedidos
-   filtrados actualmente, agrupado y ordenado por vendedor y luego fecha
-   — pensado como histórico de ventas por vendedor a lo largo de la
-   temporada. Probado: corre sin lanzar excepciones con datos de prueba.
-5. **Bug corregido**: "Imprimir ruta" imprimía con los pedidos ya cargados
-   en pantalla, no con el filtro recién elegido — si el admin cambiaba
-   "Todos los días" a un día específico pero no le daba clic a "Filtrar"
-   antes de imprimir, salían pedidos de todos los días. Ahora tanto
-   "Imprimir ruta" como "Exportar Excel" recargan automáticamente con los
-   filtros actuales antes de generar el archivo. Verificado: se confirmó
-   que el cache queda con solo los pedidos del día filtrado.
-
-Todo lo de esta ronda se probó en el mock local y **ya está verificado en
-producción real** (el cliente corrió la migración y confirmamos que
-"Todos los pedidos" carga bien).
-
-### Ronda 4 (mismo día): corregir región + precio de despacho por comuna
-
-1. **Corregir región en el modal de editar pedido** — antes solo se podía
-   corregir la comuna; si el vendedor también se equivocaba de región, el
-   total no se recalculaba con el tramo de precio correcto (RM y V Región
-   tienen tablas distintas). Ahora hay un select de Región en el modal, y
-   el total se recalcula según la región corregida. Probado con el mock:
-   cambiar comuna a "Valparaíso" + región a "V Región" recalculó el precio
-   unitario al tramo correcto de V Región.
-2. **Precio de despacho editable por comuna** (columna nueva
-   `comunas_rutas.precio_despacho`) — el admin lo edita en la pestaña
-   Comunas/Rutas (columna "Despacho ($)"), y `index.html` lo muestra al
-   cliente en vivo al escribir su comuna ("Despacho a Providencia:
-   $3.500"), leyendo desde `api/comunas-publicas.js` (ya existía, se le
-   agregó este campo). Si una comuna no tiene precio cargado (0), se
-   muestra un valor referencial como antes ("a confirmar"). **No afecta a
-   los vendedores**: `vendedor.html` y el total que se guarda en la base de
-   datos siguen siendo solo de producto, exactamente igual que antes — el
-   despacho es puramente informativo para el cliente en la landing
-   pública. Probado con mock: precio configurado se muestra y se suma al
-   total en vivo; sin configurar muestra el mensaje referencial; ambos
-   casos verificados sin errores de consola.
-
-✅ Migración corrida y verificada en producción.
-
-### Ronda 5 (mismo día): precios de Pipeño/Granadina también editables, todo conectado
-
-El cliente pidió explícitamente: si cambia un precio en admin (despacho,
-o los de Pipeño/Granadina), debe reflejarse en la página de compra, y
-poder cambiar TODOS los precios desde admin.
-
-1. **Nueva fuente única de verdad para precios de producto**: tabla
-   `configuraciones`, clave `pricing_tiers` (tramos de Pipeño por región,
-   jsonb) y `precio_granadina` (ya existía esa clave, antes sin usar).
-2. **`assets/pricing.js`**: se agregó `aplicarPrecios(datos)` — sigue
-   siendo lógica pura (no toca Supabase/DOM), solo permite sobreescribir
-   `PRICING`/`GRANADINA_PRICE` con datos ya cargados por quien la use.
-   `GRANADINA_PRICE` pasó de `const` a `let` (y en el export de Node se
-   expone con un getter, para que siempre se lea el valor vigente y no
-   quede "congelado" en el valor con el que se cargó el módulo — se
-   verificó con un smoke test en Node).
-3. **`api/precios-publicos.js`** (nuevo, público, sin login): expone
-   `pricing_tiers` y `precio_granadina` para que cualquier página los
-   pueda leer.
-4. **`api/public-order.js`**: antes de recalcular el precio de un pedido
-   público, ahora trae los precios vigentes de `configuraciones` y los
-   aplica — así el recálculo del servidor (que existe para que un cliente
-   no pueda mandar un total falso) usa los precios REALES actuales, no
-   los de respaldo desactualizados.
-5. **`index.html`**: `PRICING`/`GRANADINA_PRICE` locales (tenía su propia
-   copia, no compartía `assets/pricing.js`) ahora se sobreescriben al
-   cargar la página con `cargarPreciosPublicos()`.
-6. **`vendedor.html`**: al iniciar sesión, carga los precios vigentes y
-   los aplica antes de que el vendedor calcule un pedido nuevo.
-7. **`admin.html`**: nueva tarjeta "Precios de productos" en la pestaña
-   Comunas/Rutas — 6 tramos de Pipeño (RM y V Región) + precio de
-   Granadina, todos editables. Al guardar, además de escribir en la base
-   de datos, aplica los precios nuevos en memoria al instante (el modal de
-   editar pedido ya los usa sin recargar la página).
-
-**Probado exhaustivamente con mock y Node**: `aplicarPrecios` verificado
-en Node directo (incluyendo que `max: null` se convierte bien a
-`Infinity` y que `tierFor` elige el tramo correcto); en el mock de
-`admin.html` se confirmó que guardar un precio nuevo se refleja de
-inmediato en el cálculo del modal de editar pedido (probado con un caso
-real: cambiar el tramo 12-19 de RM a $4.200 hizo que un pedido de 12
-bidones recalculara el total correctamente); en `index.html` se confirmó
-que aplicar precios nuevos actualiza el subtotal mostrado en vivo.
-
-**Requiere la migración SQL de `pricing_tiers`** (ver sección roja al
-principio de este archivo) — todavía no corrida por el cliente. Mientras
-tanto el sistema sigue funcionando normal con los precios de respaldo
-(los mismos de siempre), solo que el admin no puede cambiarlos todavía.
-
 ## Objetivo
 
 Evolucionar la landing de pedidos de Pipeño/Granadina de "El Pelao Erasmo" a
@@ -256,55 +17,129 @@ reflejado en `schema.sql` y en los módulos construidos.
 
 ## Stack y decisiones de arquitectura ya tomadas
 
-- **Sin framework / sin build step.** HTML + JS puro (ES modules donde aplica),
-  igual que la landing original. Se decidió así porque el entorno donde se
-  construyó esto (Cowork sandbox) no tenía salida de red hacia npm — pero
-  además encaja con la preferencia del cliente de mantenerlo simple. **Si
-  ahora se dispone de Claude Code con npm real, se puede evaluar migrar a
-  Next.js si conviene, pero no es obligatorio** — el enfoque actual funciona
-  bien en Vercel tal cual (páginas estáticas + funciones serverless en
-  `/api`).
+- **Sin framework / sin build step.** HTML + JS puro, igual que la landing
+  original. Se decidió así porque el entorno donde se construyó esto (Cowork
+  sandbox) no tenía salida de red hacia npm — pero además encaja con la
+  preferencia del cliente de mantenerlo simple. La única excepción es
+  `/api/crear-vendedor.js`, una función serverless de Vercel que sí necesita
+  `npm install` en el momento del despliegue (Vercel lo hace solo, ver
+  "Despliegue" más abajo) porque usa el paquete `@supabase/supabase-js` del
+  lado del servidor. **Si ahora se dispone de Claude Code con npm real, se
+  puede evaluar migrar a Next.js si conviene, pero no es obligatorio** — el
+  enfoque actual funciona bien en Vercel tal cual (páginas estáticas +
+  funciones serverless en `/api`).
 - **Supabase** (Postgres + Auth + RLS) como backend. Plan Free.
 - **Autenticación por "usuario"**, no email: se mapea `usuario` →
   `usuario@pelaoerasmo.internal` internamente (ver `assets/supabase-client.js`).
 - El login de administrador/vendedor es un sistema interno, **separado** de
   la landing pública (`index.html`), que NO requiere login y NO se debe
   modificar en su diseño.
-- **Dos perfiles bien separados, confirmado con el cliente**: `index.html`
-  es 100% público (sin login) para que cualquier cliente pida directo por
-  WhatsApp; `login.html` → `vendedor.html`/`admin.html` es el sistema
-  interno con cuenta, solo para el equipo. Nada del sistema interno es
-  accesible sin loguearse (lo hace `assets/auth-guard.js`).
 
-## Estado actual (lo que YA está hecho y probado)
+## Estado actual — TODO lo del alcance pedido está construido y probado
 
-1. **`index.html`** — landing pública de pedidos (customer-facing). Terminada,
-   probada con Playwright, con diseño aprobado por el cliente. **No tocar el
-   diseño sin que el cliente lo pida explícitamente.** El cliente SÍ pidió
-   (en esta última sesión) que el pedido quede registrado automáticamente
-   en el sistema además de ir a WhatsApp — se implementó reemplazando el
-   viejo stub de Formspree (nunca configurado, `TU_ID_AQUI`) por una llamada
-   a `/api/public-order` (no bloqueante: si falla, el flujo de WhatsApp
-   sigue igual que siempre). Probado en navegador: cálculo de precio,
-   resumen y mensaje de éxito funcionan igual que antes; sin errores de
-   consola.
+El panel de administrador ya está **completo**: comunas, productos, banner
+de delivery, dashboard de resumen, CRUD de pedidos, generación de rutas +
+exportación a Excel, y gestión de vendedores (incluyendo crear cuentas
+nuevas). Lo único que falta para que el cliente lo use es **desplegarlo**
+(ver la guía paso a paso más abajo) — el código en sí no tiene pendientes
+del alcance acordado.
+
+1. **`index.html`** — landing pública de pedidos (customer-facing). Diseño
+   aprobado por el cliente — **no tocar el diseño ya aprobado sin que el
+   cliente lo pida explícitamente.** Sí se le agregaron (a pedido del
+   cliente, sin tocar el diseño existente) estas piezas nuevas:
+   - Panel lateral "Zonas de reparto" (pestaña fija a la izquierda): muestra
+     las comunas con despacho agrupadas por día, y las que el admin marcó
+     como no disponibles — se carga en vivo desde `comunas_rutas`.
+   - Atribución a vendedor vía link personalizado `?v=usuario`: si el
+     cliente entra desde ese link, el botón de WhatsApp apunta al número del
+     vendedor (no al principal) y el pedido queda guardado con su
+     `vendedor_id`.
+   - Guardado directo del pedido en la tabla `pedidos` de Supabase (además
+     de abrir WhatsApp) — así el administrador tiene un registro automático
+     de cada venta sin depender de Formspree (que sigue ahí pero no es la
+     vía principal).
+   - **Catálogo de productos dinámico**: el Pipeño 5L (con sus tramos por
+     región), la Granadina 700cc, el Pipeño 2 Litros y cualquier producto
+     nuevo que el admin agregue se cargan en vivo desde `productos` +
+     `producto_tramos`. Si Supabase no responde, la landing usa valores de
+     respaldo embebidos en el código (los mismos de hoy) — nunca se rompe.
+     Cualquier producto "fijo" nuevo que el admin agregue aparece
+     automáticamente como una sección más en la landing (mismo estilo que
+     Granadina), sin tocar código.
+     - **Bug encontrado y corregido** (reporte del cliente: "el Pipeño 2
+       Litros no se ve en la página principal"): el Pipeño 2 Litros, al ser
+       un producto agregado después (no existía en el HTML original como sí
+       existe la Granadina), solo se pintaba cuando la consulta en vivo a
+       Supabase funcionaba de verdad — si el proyecto real de Supabase del
+       cliente todavía no tiene corrida la migración `schema_v3_productos_banner.sql`
+       (que crea la tabla `productos`), la sección quedaba vacía en vez de
+       mostrar un valor de respaldo, a diferencia de la Granadina o el
+       Pipeño 5L. Se corrigió agregando un catálogo de respaldo embebido
+       también para este tipo de productos nuevos (`productosDinamicos`
+       ahora arranca con el Pipeño 2 Litros a $12.000 en vez de una lista
+       vacía, y se pinta de inmediato sin esperar la red) — así el
+       comportamiento queda consistente con el resto de la página: si
+       Supabase falla o la migración todavía no está corrida, igual se ve.
+       **Importante para el cliente**: si esto le pasó, es una señal de que
+       probablemente todavía no corrió `schema_v2_actualizacion.sql` y
+       `schema_v3_productos_banner.sql` en su proyecto real de Supabase (SQL
+       Editor → pegar el contenido → Run, uno primero y el otro después) —
+       sin esas migraciones, el catálogo de respaldo lo salva visualmente,
+       pero el resto de las funciones nuevas (banner editable, agregar/quitar
+       productos desde el admin, etc.) tampoco van a funcionar hasta que se
+       corran. Verificado con una prueba nueva (`test_landing_sin_supabase.js`)
+       que simula justo ese escenario (Supabase sin la tabla `productos`) y
+       confirma que ahora sí se ve y se puede pedir con el precio correcto.
+   - **Banner de delivery** arriba de todo (editable desde `admin.html`):
+     título, mensaje, tipo (gratis / con costo / personalizado), fecha
+     límite opcional con **cuenta regresiva en vivo**, e imagen/flyer
+     opcional. Cuando el tipo es "gratis" y está vigente, el despacho se
+     cobra en $0 automáticamente en el cálculo del pedido (no es solo
+     cosmético) — y apenas se cumple la fecha límite, la cuenta regresiva lo
+     detecta sola y el despacho vuelve a cobrarse según la comuna, sin que
+     el admin tenga que acordarse de desactivar nada. Está cargado y activo
+     desde ya: delivery gratis en Santiago por 2 semanas desde que se corrió
+     `schema_v3_productos_banner.sql` — el cliente puede cambiar la fecha,
+     el mensaje o desactivarlo cuando quiera desde el panel admin.
+   - El precio de despacho por comuna ahora se lee de verdad desde
+     `comunas_rutas.precio_despacho` (antes esa columna existía pero la
+     landing no la usaba) — si la comuna no tiene precio cargado, se usa un
+     valor referencial ($3.000); si está marcada "no disponible", se avisa
+     al cliente en vez de cobrar.
+   - Todo esto es "best effort": si Supabase no responde, la landing sigue
+     funcionando igual por WhatsApp (no se rompe nada).
+   - Fuente editable: `/home/claude/pelao-erasmo/template.html` (con
+     placeholders `{{HERO_B64}}` etc.) — `index.html` se regenera desde ahí
+     reemplazando esos placeholders con las imágenes en base64. **Edita
+     siempre `template.html`, nunca `index.html` directo** (se sobrescribe
+     al regenerar).
 2. **`schema.sql`** — esquema completo de base de datos. Ya está corrido en el
    proyecto real de Supabase del cliente (org "El Pelao Erasmo", proyecto
    "pelao-erasmo"). Incluye:
    - Tablas: `perfiles`, `pedidos`, `comunas_rutas` (con la semilla de
      comuna→día que pidió el cliente), `historial`, `configuraciones`.
    - RLS: un vendedor solo ve/edita sus propios pedidos, y solo antes de
-     `listo_despacho`. El admin ve/edita todo. El historial es inmutable
-     (nadie puede editarlo ni borrarlo, ni siquiera el admin).
+     `listo_despacho`. El admin ve/edita/elimina todo, en cualquier estado.
+     El historial es inmutable (nadie puede editarlo ni borrarlo, ni
+     siquiera el admin).
    - Trigger que asigna `dia_reparto` automáticamente según la comuna.
    - Trigger que registra automáticamente en `historial` cada creación/cambio
      de un pedido.
-   - **Probado de verdad**: se instaló Postgres local, se simuló el sistema
-     de `auth.users`/`auth.uid()` de Supabase, y se corrieron pruebas de
-     seguridad reales (aislamiento entre vendedores, bloqueo de edición
-     post-despacho, inmutabilidad del historial). Todo pasó. Si se modifica
-     el esquema, sería bueno repetir ese tipo de prueba antes de aplicar
-     cambios en producción.
+   - **Probado de verdad, varias veces**: se instaló Postgres local, se
+     simuló el sistema de `auth.users`/`auth.uid()`/roles `anon` y
+     `authenticated` de Supabase, y se corrieron pruebas de seguridad reales
+     con datos concretos (no solo revisando el código) para cada capa nueva
+     que se agregó. La última ronda (para el panel admin completo) confirmó
+     explícitamente, con pedidos de prueba reales: un vendedor puede editar
+     su propio pedido mientras esté pendiente/en preparación, NO puede
+     editarlo una vez que pasa a "en ruta" o después, NO puede ver ni tocar
+     pedidos de otro vendedor, y NO puede eliminar ningún pedido — mientras
+     que el admin puede editar, cambiar de estado y eliminar cualquier
+     pedido de cualquier vendedor, en cualquier estado, y ve el listado
+     completo. Estas políticas ya existían desde antes en `schema.sql`; no
+     hizo falta ninguna migración nueva para el CRUD de pedidos del admin,
+     solo se le agregó cobertura de prueba explícita.
 3. **`login.html`** — página de login. Pide usuario/contraseña, resuelve el
    email interno, llama a `supabase.auth.signInWithPassword`, revisa
    `perfiles.rol` y `perfiles.activo`, redirige a `vendedor.html` o
@@ -314,54 +149,115 @@ reflejado en `schema.sql` y en los módulos construidos.
    `assets/pricing.js` para los tramos de precio) + tabla "Mis pedidos" (la
    RLS se encarga de que solo vea los suyos). Probado con mock: cálculo de
    precio reactivo, validación de campos, inserción correcta, listado.
-5. **`admin.html`** — panel de administrador, con 4 pestañas:
-   - **Resumen**: tarjetas (pedidos hoy, pendientes, en ruta, entregados,
-     anulados, ventas hoy/mes) + desglose por vendedor, comuna, día de ruta
-     y forma de pago.
-   - **Pedidos**: tabla de TODOS los pedidos con filtros (estado, día,
-     comuna, vendedor), cambio de estado inline, modal de edición completa
-     (recalcula el total con `pricing.js` al cambiar cantidades) y
-     eliminación con confirmación.
-   - **Comunas / Rutas**: tabla editable de `comunas_rutas` (día de reparto,
-     activa/inactiva) + formulario para agregar comunas nuevas.
-   - **Usuarios**: lista de vendedores/admins con bloqueo/desbloqueo directo
-     (RLS ya lo permite), y creación de vendedores nuevos vía
-     `api/admin-users.js`.
-   Probado con un mock local del cliente de Supabase (mismo patrón que
-   vendedor.html): las 4 pestañas cargan sin errores de consola, el modal de
-   edición recalcula el total correctamente, y los toggles de comuna/usuario
-   actualizan el estado. **No probado todavía contra el Supabase real** —
-   falta que el cliente confirme el bootstrap del admin (ver sección
-   siguiente) para poder hacer login real y probar de punta a punta.
-6. **`api/admin-users.js`** — función serverless (Node, formato Vercel) que
-   crea vendedores nuevos: verifica con el token de quien llama que es un
-   admin activo, y solo entonces usa la clave secreta de Supabase (leída de
-   `process.env.SUPABASE_SERVICE_ROLE_KEY`, nunca hardcodeada) para crear el
-   usuario en `auth.users` + su fila en `perfiles`. Si falla la inserción del
-   perfil, deshace la creación del usuario de auth (no deja cuentas
-   huérfanas). Sintaxis verificada con `node --check`; **no probada en vivo**
-   porque necesita estar desplegada en Vercel con la variable de entorno
-   configurada (ver "Despliegue" más abajo).
-   Requiere `package.json` con `@supabase/supabase-js` como dependencia
-   (agregado).
-7. **`api/public-order.js`** — función serverless pública (sin login) que
-   `index.html` llama al enviar un pedido. Recalcula el precio en el
-   servidor con `assets/pricing.js` (nunca confía en el total que manda el
-   navegador — es un endpoint público, cualquiera podría mandar cualquier
-   cosa), valida los campos, y usa la clave secreta para insertar en
-   `pedidos` con `vendedor_id` apuntando a la cuenta fija `pedidos-web`.
-   Devuelve error explícito si falta `SUPABASE_SERVICE_ROLE_KEY` o si no
-   existe la cuenta `pedidos-web` todavía. Probado con un harness local
-   (mock de `req`/`res`, sin llamar a Supabase real): método no permitido,
-   falta de service key, y validación de campos — los 4 casos devuelven el
-   status/mensaje esperado.
-8. **`scripts/crear-cuentas-iniciales.js`** — script de configuración
-   inicial (correr una sola vez, localmente, con la clave secreta como
-   variable de entorno) que crea la cuenta de sistema `pedidos-web` y las
-   cuentas `vendedor1`/`vendedor2`/`vendedor3`. Idempotente (si una cuenta
-   ya existe, la salta). Imprime las contraseñas generadas solo en la
-   terminal, una vez. Sintaxis verificada con `node --check`; no se pudo
-   probar en vivo porque necesita la clave secreta.
+   Además incluye:
+   - **"Mi perfil"**: cada vendedor puede editar su propio nombre y su
+     WhatsApp (`telefono_whatsapp`) — protegido por un trigger en la base de
+     datos que impide que se auto-edite el rol, el estado activo/bloqueado o
+     el username, aunque alguien manipule el request desde el navegador.
+   - **"Comunas y días de reparto"**: panel de solo lectura con el día de
+     despacho, el valor de despacho y la disponibilidad de cada comuna.
+   - **"Mis ventas" → Descargar Excel**: exporta a `.xlsx` (vía SheetJS,
+     cargado desde CDN, mismo patrón sin build step del resto del proyecto)
+     únicamente los pedidos del vendedor que tiene la sesión abierta — la
+     RLS ya garantiza que nunca vea ni pueda exportar pedidos de otro
+     vendedor.
+5. **`admin.html`** — panel completo:
+   - **Resumen de pedidos (dashboard)**: pedidos de hoy, pendientes,
+     preparación, listos para despacho, en ruta, entregados y anulados de
+     hoy, más ventas de hoy y ventas del mes (ambas excluyendo anulados). Se
+     recalcula automáticamente al abrir el panel y cada vez que se cambia el
+     estado de un pedido.
+   - **Resumen general**: comunas cubiertas, comunas no disponibles,
+     vendedores activos.
+   - **Pedidos**: listado completo (hasta 300 más recientes por filtro), con
+     filtros por texto libre (nombre/teléfono), estado, vendedor, comuna y
+     rango de fechas. Cada fila permite cambiar el estado directo desde un
+     selector, y tiene un botón "Ver" que despliega: edición de los datos
+     del pedido (nombre, teléfono, dirección, número, depto, comuna,
+     observaciones), detalle de los productos pedidos, y el historial
+     completo de cambios de ese pedido (quién y cuándo). También se puede
+     eliminar un pedido (con confirmación).
+   - **Generar ruta de reparto**: elegir "hoy", "mañana", una fecha
+     específica, o cualquier día de la semana — arma la lista de pedidos de
+     esa ruta (excluye anulados), ordenados por comuna y luego por
+     dirección, y permite descargar un Excel con columnas: comuna,
+     dirección, cliente, teléfono, vendedor, productos, forma de pago,
+     total y estado.
+   - **Comunas y rutas**: editar día de reparto, valor de despacho y
+     marcar/desmarcar una comuna como "no disponible para reparto" (se
+     refleja automáticamente en `index.html` y `vendedor.html`, todos leen
+     la misma tabla `comunas_rutas`). También permite agregar comunas
+     nuevas.
+   - **Productos**: editar nombre, unidad, descripción, precio y
+     activo/inactivo de cada producto; agregar productos nuevos (fijos o
+     por tramos); y para productos de tramos (como el Pipeño 5L) editar los
+     precios por cantidad y por región. Eliminar productos también está
+     disponible (con confirmación) — no rompe pedidos anteriores porque
+     cada pedido guarda una copia de sus productos en
+     `pedidos.detalle_productos`, no una referencia viva a la tabla.
+   - **Vendedores**: lista de todos los vendedores con su WhatsApp y un
+     interruptor para bloquear/desbloquear (un vendedor bloqueado no puede
+     iniciar sesión, pero sus pedidos anteriores quedan intactos). Formulario
+     para **crear un vendedor nuevo** (usuario, nombre, WhatsApp, contraseña
+     provisoria) — esto llama a la función serverless
+     `/api/crear-vendedor.js` (ver más abajo) porque crear usuarios de
+     autenticación requiere la clave secreta de Supabase, que nunca puede
+     estar en el navegador.
+   - **Banner de delivery**: activar/desactivar, elegir tipo (gratis / con
+     costo / personalizado), título, mensaje, fecha límite opcional (con
+     cuenta regresiva automática en la landing) e imagen/flyer opcional.
+6. **`schema_v2_actualizacion.sql`** — migración incremental sobre
+   `schema.sql` (**el cliente debe correrla una sola vez en Supabase → SQL
+   Editor → Run**, sin volver a correr `schema.sql`). Agrega: teléfono de
+   WhatsApp por vendedor, autoedición segura del propio perfil, lectura
+   pública (sin login) de `comunas_rutas` para la landing, una función
+   seguridad-definer para resolver `?v=usuario` a un vendedor válido sin
+   exponer el resto de la tabla `perfiles`, y permiso para que la landing
+   pública guarde pedidos directo en la base de datos (atribuidos a un
+   vendedor o "sin vendedor" si es una venta orgánica). Probada de la misma
+   forma rigurosa que `schema.sql`.
+7. **`schema_v3_productos_banner.sql`** — migración incremental sobre las
+   dos anteriores (**correrla una sola vez, después de la v2, sin repetir
+   las anteriores**). Agrega: tabla `productos` (catálogo editable, con
+   precio fijo o por tramos), tabla `producto_tramos` (precios por cantidad
+   y región para productos de tipo "tramos"), lectura pública de
+   `configuraciones` (para que la landing muestre el banner sin login), y
+   siembra el catálogo inicial: Pipeño 5 Litros (tramos, sin cambios de
+   precio), Granadina 700cc ($22.000 el display de 12) y Pipeño 2 Litros
+   ($12.000 el display de 6) — además de un banner de delivery gratis en
+   Santiago por 2 semanas ya cargado y activo, editable desde el panel
+   admin. Probada con el mismo método (Postgres local + simulación de RLS
+   de Supabase).
+8. **`api/crear-vendedor.js`** — función serverless (Vercel), NO se ejecuta
+   en el navegador. Recibe una petición del panel admin con el token de
+   sesión del que está logueado, y:
+   1. Verifica ese token contra Supabase (nunca confía en lo que diga el
+      navegador sobre quién es).
+   2. Verifica, consultando la tabla `perfiles` con la clave secreta, que
+      quien llama es realmente un admin activo — si no lo es, rechaza.
+   3. Valida los datos del vendedor nuevo (usuario, nombre, contraseña de al
+      menos 6 caracteres).
+   4. Verifica que el nombre de usuario no esté repetido.
+   5. Crea el usuario de autenticación en Supabase (con el mismo esquema
+      `usuario@pelaoerasmo.internal` que usa el resto del sistema) y su fila
+      en `perfiles` con rol `vendedor`.
+   6. Si por algún motivo falla el paso de crear el perfil, deshace
+      (elimina) el usuario de autenticación recién creado, para no dejar una
+      cuenta fantasma sin perfil asociado.
+   - **Probada la lógica completa** (18 casos: falta de configuración,
+     método incorrecto, sin token, token inválido, llamador no-admin,
+     admin bloqueado, usuario inválido, contraseña corta, usuario duplicado,
+     error al crear la cuenta, rollback si falla el perfil, éxito, y
+     normalización de mayúsculas) usando un doble local de
+     `@supabase/supabase-js` — no se pudo probar contra el Supabase real
+     desde este entorno (sin salida de red), pero la lógica del handler está
+     verificada exhaustivamente y no depende de nada que no esté cubierto
+     por esas pruebas.
+   - Requiere el paquete `@supabase/supabase-js` — ya está declarado en
+     `package.json` en la raíz del proyecto, Vercel lo instala solo al
+     desplegar.
+   - Requiere dos variables de entorno en Vercel (ver la guía de despliegue
+     abajo): `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`.
 9. **`assets/`**:
    - `brand.css` — estilos compartidos del sistema interno (misma paleta que
      la landing).
@@ -379,72 +275,234 @@ reflejado en `schema.sql` y en los módulos construidos.
 - La **clave publicable** de Supabase ya está en `assets/supabase-client.js`
   — está bien que esté ahí y en el repo de GitHub, es pública por diseño.
 - La **clave secreta** (`sb_secret_...`) de Supabase **NO está en ningún
-  archivo de este proyecto**. El cliente la tiene guardada aparte. Cuando se
-  construya el módulo de administrador (crear usuarios, etc.), esa clave
-  debe ir **únicamente** como variable de entorno en la configuración del
-  proyecto de Vercel (nunca en un archivo del repo, nunca en el código que
-  corre en el navegador). Pídesela al cliente cuando la necesites, y bajo
-  ningún motivo la guardes en un archivo que se vaya a commitear.
+  archivo de este proyecto, y nunca debe estarlo**. Va **únicamente** como
+  variable de entorno `SUPABASE_SERVICE_ROLE_KEY` en la configuración del
+  proyecto de Vercel (Project Settings → Environment Variables) — nunca en
+  un archivo del repo, nunca en código que corra en el navegador, nunca
+  pegada en un chat. El cliente debe copiarla directo desde Supabase
+  (Project Settings → API → clave `service_role`/secreta) al formulario de
+  Vercel, sin que pase por ningún otro lugar. Ver el paso a paso en
+  "Despliegue" más abajo.
 
-## Bootstrap: ✅ completo
+## Novedades de esta sesión — días especiales, comunas por región e imágenes editables (v4)
 
-Ya no depende de que el cliente cree nada a mano. Se creó vía
-`scripts/crear-cuentas-iniciales.js`: cuenta `admin`, cuenta de sistema
-`pedidos-web`, y `vendedor1`/`vendedor2`/`vendedor3`. Login de `admin`
-probado en producción de punta a punta (ver más abajo).
+Todo lo que sigue ya está construido, probado (Postgres local + RLS +
+Playwright) y cargado en `admin.html` / `index.html` de este entrega. Como
+con `schema_v2` y `schema_v3`, hay **una migración SQL nueva que el cliente
+debe correr una sola vez** en su Supabase real.
 
-## Lo que falta por construir (módulos pendientes, en orden)
+10. **`schema_v4_dias_especiales_imagenes.sql`** — migración incremental
+    (**correrla una sola vez, después de v2 y v3, sin repetir las
+    anteriores**: Supabase → SQL Editor → pegar el contenido → Run). Agrega
+    la tabla `dias_especiales_reparto` (fecha, comuna opcional — vacío
+    significa "todas las comunas", nota, activo/inactivo) con lectura
+    pública (para que la landing avise a los clientes) y escritura solo para
+    admin. No requiere ninguna tabla nueva para el resto de las funciones de
+    abajo: reutiliza la tabla `configuraciones` que ya existía desde
+    `schema.sql`, agregando una nueva clave (`imagenes_landing`) además de
+    la que ya usaba el banner (`banner_delivery`).
+11. **Comunas separadas por región (RM vs V Región)** — pedido explícito del
+    cliente para "que se vea la diferencia". En `admin.html`, la tabla de
+    comunas ahora se muestra en dos bloques con su propio título
+    ("Región Metropolitana" / "V Región"), cada uno con su propia tabla,
+    en vez de una sola lista mezclada.
+12. **Selección múltiple + edición en lote de comunas** — cada fila de
+    comuna en `admin.html` tiene ahora un checkbox de selección (además del
+    checkbox de disponibilidad que ya existía). Se pueden marcar varias
+    comunas (de una región o de ambas) y, desde una barra que aparece arriba
+    de la tabla, aplicarles de una sola vez el mismo día de reparto,
+    precio de despacho y/o disponibilidad. Como con la edición fila por
+    fila, hay que apretar "Guardar todos los cambios" después para que
+    quede guardado en Supabase.
+13. **Botón rápido "Activar despacho gratis por esta semana (7 días)"** —
+    en la sección de banner de delivery de `admin.html`. Con un solo clic
+    completa automáticamente el banner (activo = sí, tipo = gratis, título
+    y mensaje sugeridos si estaban vacíos, fecha límite = hoy + 7 días) sin
+    borrar nada que el admin ya haya escrito a mano. El editor manual de
+    banner que ya existía sigue disponible tal cual para casos distintos a
+    "esta semana". Igual que antes, falta apretar "Guardar banner" para que
+    quede activo.
+14. **Días especiales de reparto (CRUD)** — nueva sección en `admin.html`
+    para agregar una excepción puntual: repartir en una comuna (o en
+    todas) en una fecha específica aunque no sea su día habitual de la
+    semana. Se puede activar/desactivar o eliminar cada una. Esto también
+    se conectó al generador de rutas: al generar la ruta de una fecha que
+    tiene un día especial activo, la ruta incluye automáticamente los
+    pedidos de esas comunas fuera de ciclo (marcados con una etiqueta "día
+    especial" para que se distingan de los pedidos normales del día). En la
+    landing pública, estos días especiales también aparecen en el panel de
+    "Zonas de reparto" como aviso para el cliente.
+15. **Imágenes de la página principal editables desde admin** — nueva
+    sección en `admin.html` para subir/quitar, sin tocar código ni volver a
+    desplegar: la foto principal (hero), el flyer de precios de Región
+    Metropolitana y el flyer de precios de V Región. Cada una se puede
+    "volver a la de siempre" (vuelve al archivo original que ya venía en el
+    proyecto) si el admin se arrepiente. Se guardan en la misma tabla
+    `configuraciones` (clave `imagenes_landing`) que ya usaba el banner —
+    misma lógica de siempre. Igual que con el resto de imágenes del
+    sistema, si no hay nada guardado o Supabase falla, la landing sigue
+    mostrando las imágenes originales — nunca queda en blanco.
+16. **Landing: comunas filtradas por región + resumen visible al entrar** —
+    al elegir "Región Metropolitana" o "V Región" en la landing, tanto el
+    panel de "Zonas de reparto" (el que se abre como pestaña) como un nuevo
+    resumen que aparece de inmediato al entrar a la página muestran
+    **solo** las comunas de la región elegida, con su precio de despacho.
+    Este resumen nuevo (tarjeta fija, no un pop-up ni una pestaña que haya
+    que abrir) se ve apenas se carga la página, sin que el cliente tenga
+    que hacer clic en nada — cumple el pedido de "que se vea directo al
+    entrar a la página". **Decisión de diseño**: se probó primero abrir
+    automáticamente el panel completo de "Zonas de reparto" al cargar la
+    página, pero las pruebas automatizadas detectaron que eso bloqueaba
+    toda la página (el cliente no podía hacer clic en el formulario de
+    pedido mientras el panel estuviera abierto encima). Por eso se optó por
+    esta tarjeta de resumen no bloqueante en vez del panel completo
+    abierto — el cliente ve los precios de inmediato y puede seguir
+    interactuando con el resto de la página al mismo tiempo; si quiere el
+    detalle completo (comunas no disponibles, etc.) puede abrir el panel
+    completo con un botón "Ver todas las comunas y detalle completo".
 
-1. **Imprimir ruta: ✅ hecho.** En la pestaña "Pedidos" de `admin.html` hay
-   un botón "🖨️ Imprimir ruta" que abre una hoja lista para imprimir con
-   los pedidos filtrados actualmente (usa el filtro "Todos los días" para
-   acotar a un día específico), ordenados por comuna y luego dirección.
-   Excluye automáticamente pedidos `anulado` y `entregado` (no tiene
-   sentido llevarlos en la ruta de reparto). Lógica de filtro/orden
-   verificada con datos de prueba. El único paso no verificable en el
-   entorno de pruebas es el diálogo nativo de impresión del sistema
-   operativo en sí (`window.print()`) — es comportamiento estándar del
-   navegador, no código nuestro, así que no hay razón para dudar que
-   funcione para el usuario real.
-2. **Exportación a Excel** — todavía no construido. Sería un botón que
-   genera un `.xlsx` en el navegador (evaluar SheetJS vía CDN, mismo patrón
-   que el resto del proyecto), con las mismas columnas y orden que ya tiene
-   "Imprimir ruta". Como la función de imprimir ya filtra/ordena bien, se
-   puede reutilizar esa misma lógica cuando se construya esto.
-3. **Vista de historial** dentro del panel admin (por ahora el historial ya
-   se registra solo en la base de datos vía trigger; falta la UI para verlo).
-4. Preparar la arquitectura para integrar la API de Google Maps más adelante
-   (no implementar ahora, solo no bloquear el camino).
+### Pruebas nuevas de esta sesión
 
-## Despliegue
+- `test_v4.sql` (local, Postgres + simulación de RLS de Supabase): lectura
+  pública de días especiales y de la nueva clave de configuración,
+  bloqueo de escritura para anon/vendedor, permisos correctos para admin.
+- `test_admin_v4.js` (Playwright): comunas agrupadas y ordenadas por
+  región, selección múltiple + edición en lote + verificación de guardado,
+  botón rápido de banner (fecha calculada y guardado correcto), CRUD
+  completo de días especiales, guardado de imágenes (incluye verificar que
+  las imágenes no tocadas no se sobreescriben con `null`).
+- `test_landing_zonas_region.js` (Playwright): resumen visible sin ningún
+  clic, panel completo permanece cerrado por defecto (no bloquea la
+  página), filtrado correcto de comunas/precios/días especiales al
+  cambiar entre Región Metropolitana y V Región (en ambos sentidos).
+- `test_landing_imagenes.js` (Playwright): la landing usa la imagen nueva
+  subida por el admin cuando existe, y sigue mostrando la de siempre si no
+  hay nada guardado o Supabase falla.
+- Se corrigieron además tres pruebas antiguas que quedaron desactualizadas
+  por estos cambios (mocks a los que les faltaba la tabla nueva o el campo
+  `region`, y un selector de checkbox ambiguo después de agregar el
+  checkbox de selección múltiple) — toda la batería de pruebas (SQL +
+  Playwright, nuevas y antiguas) vuelve a pasar 100% sin errores.
 
-**✅ Ya está en GitHub y en Vercel, en producción.**
+## Bootstrap pendiente (antes de poder probar login)
 
-- **GitHub**: https://github.com/Viexlatam-codificador/pelao-erasmo-sistema
-  (repo público, cuenta `Viexlatam-codificador`). `gh` se instaló localmente
-  en `~/.local/bin/gh` (no vía Homebrew, que no está instalado en esta Mac).
-- **Vercel**: https://pelao-erasmo-sistema.vercel.app (proyecto
-  `viex-s-projects/pelao-erasmo-sistema`). El repo de GitHub quedó conectado
-  automáticamente, así que **cada push a `main` dispara un deploy nuevo**.
-  Verificado en navegador: `login.html` carga bien, sin errores de consola.
-- El proyecto no tiene `vercel.json`: es un sitio estático en la raíz + una
-  función serverless en `/api`, que Vercel detecta automáticamente.
-  `package.json` declara `@supabase/supabase-js` como dependencia para que
-  la función la tenga disponible (se instaló sola en el build).
+El cliente debe crear a mano el primer usuario admin en el dashboard de
+Supabase (Authentication → Users → Add user, con email
+`admin@pelaoerasmo.internal`), y luego insertar la fila correspondiente en
+`public.perfiles` vía SQL Editor. Instrucciones exactas ya se le dieron por
+chat. Confirmar si ya lo hizo. (Una vez que exista ese primer admin, ya
+puede crear el resto de los vendedores directamente desde el panel — el
+botón "Crear vendedor nuevo" en `admin.html` — sin volver a tocar SQL.)
 
-### ⚠️ Pendiente para que el panel admin funcione al 100%
+## Nota importante: notificación automática al admin por WhatsApp
 
-Falta configurar en el dashboard de Vercel (Project → Settings →
-Environment Variables) la variable **`SUPABASE_SERVICE_ROLE_KEY`** con la
-clave secreta que el cliente tiene guardada aparte. Sin esto:
-- Todo el sitio funciona igual (landing, login, vendedor, y el panel admin
-  en sus pestañas de Resumen/Pedidos/Comunas).
-- Solo falla "Crear vendedor" en la pestaña Usuarios de `admin.html`, con un
-  error explícito ("Falta configurar SUPABASE_SERVICE_ROLE_KEY en Vercel"),
-  no en silencio.
-Claude no debe pedir ni manejar esa clave directamente — el cliente debe
-pegarla él mismo en el dashboard de Vercel, y luego redesplegar (o esperar
-al próximo push).
+El cliente pidió que, además de que el pedido llegue al WhatsApp del
+vendedor (o al principal si no hay vendedor), a él **le llegue
+automáticamente por WhatsApp la información de cada venta**. Esto **no es
+técnicamente posible gratis**: un link `wa.me/...` abre WhatsApp con el
+mensaje precargado pero requiere que alguien toque "Enviar" — no se puede
+disparar en silencio desde una página web — y un solo link solo puede
+apuntar a un número a la vez (no se puede "enviar a dos personas" con un
+clic). La única forma de lograr un envío 100% automático y silencioso es la
+API oficial de WhatsApp Business, que es paga y requiere aprobación de
+Meta — está fuera del alcance actual.
+
+Lo que sí se implementó como equivalente funcional: **cada pedido de la
+landing se guarda automáticamente en la base de datos** (tabla `pedidos`),
+sea o no atribuido a un vendedor, y ahora el panel admin ya está completo
+(dashboard + listado de pedidos), así que el admin puede ver ahí, en tiempo
+real, cada venta que entra — sin depender de que alguien le reenvíe el
+WhatsApp. Falta confirmarle esto al cliente para que sepa qué esperar.
+
+## Pendientes fuera del alcance ya construido (ideas a futuro, no bloqueantes)
+
+- Integrar la API de Google Maps para optimizar el orden de la ruta por
+  distancia real (hoy se ordena alfabéticamente por comuna y dirección, que
+  es una aproximación razonable sin costo).
+- Notificaciones automáticas reales (fuera de WhatsApp) si el cliente
+  eventualmente quiere pagar por la API oficial de WhatsApp Business o un
+  servicio de email/SMS.
+
+## Despliegue — guía paso a paso (GitHub + Vercel)
+
+Este entorno de Cowork **no tiene salida de red hacia GitHub ni npm**, así
+que no puede hacer el despliegue por sí mismo. Estos pasos están pensados
+para hacerse desde el celular o el computador del cliente, sin necesitar
+saber programar. Si el cliente tiene Claude Code corriendo en su
+computador (con git y npm reales), puede simplemente pedirle "sube este
+proyecto a GitHub y despliégalo en Vercel" y Claude Code hará estos mismos
+pasos automáticamente.
+
+### Paso 1 — Subir el código a GitHub
+
+1. Si no tiene cuenta, crear una gratis en [github.com](https://github.com).
+2. Crear un repositorio nuevo (botón verde "New"), por ejemplo llamado
+   `pelao-erasmo-sistema`. Puede dejarlo **privado** (recomendado, aunque no
+   es obligatorio ya que no hay claves secretas en el código).
+3. Subir todos los archivos de esta carpeta al repositorio. La forma más
+   simple sin usar la terminal: en la página del repo recién creado, usar
+   "uploading an existing file" y arrastrar todos los archivos y carpetas
+   (incluyendo `api/`, `assets/`, `package.json`, `index.html`, `login.html`,
+   `vendedor.html`, `admin.html`).
+   - **No subir** los archivos que empiezan con `test_` ni `screenshot_` —
+     son solo para pruebas internas, no afectan el funcionamiento pero no
+     hace falta subirlos.
+
+### Paso 2 — Conectar el repositorio a Vercel
+
+1. Crear una cuenta gratis en [vercel.com](https://vercel.com) (se puede
+   entrar directo con la cuenta de GitHub del paso anterior — es lo más
+   simple).
+2. En el dashboard de Vercel, "Add New..." → "Project".
+3. Elegir el repositorio `pelao-erasmo-sistema` de la lista (Vercel pide
+   autorización para leer los repos de GitHub la primera vez).
+4. En "Configure Project": como es un sitio estático + funciones `/api`,
+   Vercel lo detecta automáticamente, no hace falta tocar nada en
+   "Build and Output Settings".
+5. **Antes de hacer clic en "Deploy"**, abrir la sección "Environment
+   Variables" en esa misma pantalla (o después, desde Project Settings →
+   Environment Variables) y agregar estas dos:
+
+   | Nombre | Valor | Dónde conseguirlo |
+   |---|---|---|
+   | `SUPABASE_URL` | `https://kbrnecuueekypztyopua.supabase.co` | Ya es la URL pública del proyecto (la misma que está en `assets/supabase-client.js`) |
+   | `SUPABASE_SERVICE_ROLE_KEY` | (clave secreta, empieza con `sb_secret_...`) | Supabase → el proyecto → Project Settings → API → sección "Project API keys" → la clave `service_role` / secreta (NO la publicable) |
+
+   La clave secreta **nunca se debe pegar en ningún chat ni archivo del
+   repositorio** — solo va en este formulario de Vercel, que es privado y
+   está pensado exactamente para esto.
+6. Clic en "Deploy". Vercel instala las dependencias (`@supabase/supabase-js`
+   desde `package.json`) y publica el sitio solo. En un par de minutos queda
+   una URL tipo `https://pelao-erasmo-sistema.vercel.app`.
+
+### Paso 3 — Verificar que quedó bien
+
+1. Abrir la URL que dio Vercel — debería verse la landing pública igual que
+   siempre.
+2. Ir a `/login.html`, entrar con el usuario admin ya creado en Supabase
+   (ver "Bootstrap pendiente" arriba).
+3. En el panel admin, ir a "Crear vendedor nuevo" y crear una cuenta de
+   prueba — si el mensaje dice "creado correctamente", significa que las
+   variables de entorno quedaron bien configuradas. Si dice "no se pudo
+   conectar con el servidor", revisar que las dos variables de entorno del
+   Paso 2 estén bien escritas (sin espacios de más) y volver a desplegar
+   (Vercel → el proyecto → Deployments → los tres puntos del último deploy →
+   "Redeploy").
+
+### Paso 4 — Dominio propio (opcional)
+
+Si el cliente ya tiene un dominio (ej. `pelaoerasmo.cl`), en Vercel →
+el proyecto → Settings → Domains se puede agregar y Vercel da las
+instrucciones exactas de qué registro DNS agregar en el proveedor del
+dominio. No es necesario para que el sitio funcione — la URL gratis de
+Vercel (`....vercel.app`) ya es un sitio real y funcional.
+
+### Después de desplegado — cómo actualizar el sitio a futuro
+
+Cualquier cambio futuro (otro producto, otro texto) se hace: (1) editar los
+archivos localmente o pedírselo a Claude, (2) subir los cambios al mismo
+repositorio de GitHub (reemplazando los archivos modificados), y Vercel
+**redespliega solo** apenas detecta el cambio — no hay que repetir el Paso 2.
 
 ## Estilo de trabajo que pidió el cliente
 
@@ -452,6 +510,7 @@ al próximo push).
 - Reutilizar al máximo el código existente.
 - No reconstruir la landing pública desde cero ni cambiar su diseño.
 - Explicarle los pasos de forma clara y concreta (suele trabajar desde el
-  celular, con poco tiempo) — pero ahora que tiene Claude Code en su Mac,
-  probablemente prefiera que las cosas se hagan directo (git, deploy, etc.)
-  en vez de que se le pidan pasos manuales uno por uno.
+  celular, con poco tiempo) — pero si en algún momento tiene Claude Code
+  corriendo en su computador (con git y npm reales), probablemente prefiera
+  que las cosas se hagan directo (git, deploy, etc.) en vez de que se le
+  pidan pasos manuales uno por uno.
