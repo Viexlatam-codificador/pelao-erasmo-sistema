@@ -663,6 +663,10 @@
     <label>Comuna <span class="required-flag">*</span></label>
     <input type="text" id="comuna" list="comunaList" placeholder="Ej: Providencia" oninput="updateAll()">
     <datalist id="comunaList"></datalist>
+    <label>¿Quién te atendió? (opcional)</label>
+    <select id="vendedorSelect" onchange="onVendedorSelectChange()">
+      <option value="">Nadie en particular / no sé</option>
+    </select>
     <label>Notas adicionales (opcional)</label>
     <textarea id="notas" placeholder="Horario de entrega, referencias, etc."></textarea>
   </section>
@@ -1266,6 +1270,42 @@ async function resolverVendedorDesdeLink(){
   }catch(e){ /* si falla, el pedido simplemente llega al WhatsApp principal */ }
 }
 
+// Lista de vendedores activos para que el cliente pueda elegir manualmente
+// quién lo atendió (además del link personalizado ?v=usuario, para los
+// casos en que el cliente entra directo a la página pero igual sabe con
+// quién habló). Si no hay conexión, el selector simplemente queda con la
+// única opción "Nadie en particular" — no rompe el resto del formulario.
+let vendedoresListaCache = [];
+async function cargarVendedoresPublico(){
+  if(!supaPublic) return;
+  try{
+    const { data, error } = await supaPublic.rpc("vendedores_publico_activos");
+    if(!error && data){
+      vendedoresListaCache = data;
+    }
+  }catch(e){ /* selector queda vacío, no bloquea el pedido */ }
+}
+
+function renderVendedorSelect(){
+  const sel = document.getElementById("vendedorSelect");
+  if(!sel) return;
+  const actualId = vendedorInfo ? vendedorInfo.id : "";
+  sel.innerHTML = '<option value="">Nadie en particular / no sé</option>' +
+    vendedoresListaCache.map(v =>
+      `<option value="${v.id}"${v.id === actualId ? " selected" : ""}>${v.nombre_completo}</option>`
+    ).join("");
+}
+
+// El cliente eligió (o cambió) manualmente el vendedor desde el selector —
+// esto sobrescribe lo que haya resuelto el link ?v=usuario, porque es una
+// elección explícita y más confiable que un link que pudo ser reenviado.
+function onVendedorSelectChange(){
+  const sel = document.getElementById("vendedorSelect");
+  const id = sel.value;
+  if(!id){ vendedorInfo = null; return; }
+  vendedorInfo = vendedoresListaCache.find(v => v.id === id) || null;
+}
+
 function openLightbox(){
   document.getElementById("lightboxImg").src = document.getElementById("flyerImg").src;
   document.getElementById("lightbox").classList.add("open");
@@ -1435,15 +1475,18 @@ renderProductosExtra(); // idem: pinta el catálogo de respaldo antes de esperar
     cargarBannerDelivery(),
     cargarProductosPublico(),
     cargarImagenesLandingPublico(),
-    resolverVendedorDesdeLink()
+    resolverVendedorDesdeLink(),
+    cargarVendedoresPublico()
   ]);
   // Con los datos reales ya cargados, se vuelve a pintar todo lo que
   // depende de ellos (precios, nombres de producto, banner, despacho,
-  // flyer de precios de la región actual, y el panel de zonas de reparto
-  // con los días especiales que ya llegaron).
+  // flyer de precios de la región actual, el panel de zonas de reparto
+  // con los días especiales que ya llegaron, y el selector de vendedor
+  // — pre-marcado si el link ?v=usuario ya resolvió uno).
   renderTiers();
   renderProductosExtra();
   renderComunasPanel();
+  renderVendedorSelect();
   document.getElementById("flyerImg").src = FLYERS[currentRegion];
   document.getElementById("granadinaNombreTexto").textContent = GRANADINA_NOMBRE;
   document.getElementById("granadinaUnidadTexto").textContent = `${GRANADINA_UNIDAD_TEXTO} — ${money(GRANADINA_PRICE)} c/u`;
