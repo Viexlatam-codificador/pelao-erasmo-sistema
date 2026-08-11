@@ -1382,6 +1382,18 @@
   const edicionProductosCache = {};
   const edicionDespachoCache = {};
 
+  // Sugiere el día de reparto habitual de la comuna que se acaba de escribir
+  // (no lo fuerza — el admin puede seguir cambiando el desplegable a mano
+  // después de esto, por ejemplo si la clienta pidió otro día distinto).
+  function sugerirDiaSegunComuna(id) {
+    const inputComuna = document.getElementById(`editComuna_${id}`);
+    const selectDia = document.getElementById(`editDiaReparto_${id}`);
+    if (!inputComuna || !selectDia) return;
+    const texto = inputComuna.value.trim().toLowerCase();
+    const match = comunasCache.find(c => (c.comuna || "").trim().toLowerCase() === texto);
+    if (match && match.dia_reparto) selectDia.value = match.dia_reparto;
+  }
+
   function inicializarEdicionPedido(p) {
     if (edicionProductosCache[p.id]) return;
     let lineas = (p.detalle_productos || []).map(l => ({
@@ -1572,7 +1584,22 @@
                 <div style="flex:1;"><label>Depto</label><input type="text" id="editDepto_${p.id}" value="${p.departamento || ""}"></div>
               </div>
               <label>Comuna</label>
-              <input type="text" id="editComuna_${p.id}" value="${p.comuna}">
+              <input type="text" id="editComuna_${p.id}" value="${p.comuna}" onchange="sugerirDiaSegunComuna('${p.id}')">
+              <div style="display:flex;gap:8px;">
+                <div style="flex:1;">
+                  <label>Fecha del pedido</label>
+                  <input type="date" id="editFecha_${p.id}" value="${p.fecha}">
+                </div>
+                <div style="flex:1;">
+                  <label>Día de entrega/reparto</label>
+                  <select id="editDiaReparto_${p.id}">
+                    ${[["lunes","Lunes"],["martes","Martes"],["miercoles","Miércoles"],["jueves","Jueves"],["viernes","Viernes"],["sabado","Sábado"],["domingo","Domingo"],["sin_asignar","Sin asignar"]].map(([v,l]) =>
+                      `<option value="${v}" ${p.dia_reparto === v ? "selected" : ""}>${l}</option>`
+                    ).join("")}
+                  </select>
+                </div>
+              </div>
+              <p style="font-size:.72rem;color:#888;margin:2px 0 8px;">El "Día de entrega/reparto" es el que decide en qué ruta aparece este pedido al usar "Generar ruta" — cámbialo si la clienta pidió otro día distinto al habitual de su comuna.</p>
               <label>Forma de pago</label>
               <select id="editFormaPago_${p.id}">
                 ${["Contra entrega", "Efectivo contra entrega", "Transferencia contra entrega"].map(fp =>
@@ -1685,6 +1712,8 @@
       numero: document.getElementById(`editNumero_${id}`).value.trim(),
       departamento: document.getElementById(`editDepto_${id}`).value.trim() || null,
       comuna: document.getElementById(`editComuna_${id}`).value.trim(),
+      fecha: document.getElementById(`editFecha_${id}`).value,
+      dia_reparto: document.getElementById(`editDiaReparto_${id}`).value,
       forma_pago: document.getElementById(`editFormaPago_${id}`).value,
       observaciones: document.getElementById(`editObs_${id}`).value.trim() || null,
       cantidad_pipeno: lineaPipeno ? lineaPipeno.cantidad : 0,
@@ -1694,9 +1723,9 @@
       total: subtotalProductos + despacho
     };
 
-    if (!payload.nombre_cliente || !payload.telefono || !payload.direccion || !payload.numero || !payload.comuna) {
+    if (!payload.nombre_cliente || !payload.telefono || !payload.direccion || !payload.numero || !payload.comuna || !payload.fecha) {
       status.classList.add("error");
-      status.textContent = "Completa nombre, teléfono, dirección, número y comuna.";
+      status.textContent = "Completa nombre, teléfono, dirección, número, comuna y fecha.";
       return;
     }
 
