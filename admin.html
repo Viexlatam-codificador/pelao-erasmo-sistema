@@ -139,6 +139,8 @@
         <label class="toggle-disponible"><input type="checkbox" class="rutaDiaCheckbox" value="miercoles"> Miércoles</label>
         <label class="toggle-disponible"><input type="checkbox" class="rutaDiaCheckbox" value="jueves"> Jueves</label>
         <label class="toggle-disponible"><input type="checkbox" class="rutaDiaCheckbox" value="viernes"> Viernes</label>
+        <label class="toggle-disponible"><input type="checkbox" class="rutaDiaCheckbox" value="sabado"> Sábado</label>
+        <label class="toggle-disponible"><input type="checkbox" class="rutaDiaCheckbox" value="domingo"> Domingo</label>
       </div>
       <div style="display:flex;gap:10px;">
         <button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:.72rem;" onclick="marcarTodosDiasRuta(true)">Marcar todos</button>
@@ -209,6 +211,8 @@
             <option value="miercoles">Miércoles</option>
             <option value="jueves">Jueves</option>
             <option value="viernes">Viernes</option>
+            <option value="sabado">Sábado</option>
+            <option value="domingo">Domingo</option>
           </select>
         </div>
         <div style="flex:1;min-width:120px;">
@@ -262,6 +266,8 @@
           <option value="miercoles">Miércoles</option>
           <option value="jueves">Jueves</option>
           <option value="viernes">Viernes</option>
+          <option value="sabado">Sábado</option>
+          <option value="domingo">Domingo</option>
         </select>
       </div>
       <div style="flex:1;min-width:110px;">
@@ -505,7 +511,9 @@
     { value: "martes", label: "Martes" },
     { value: "miercoles", label: "Miércoles" },
     { value: "jueves", label: "Jueves" },
-    { value: "viernes", label: "Viernes" }
+    { value: "viernes", label: "Viernes" },
+    { value: "sabado", label: "Sábado" },
+    { value: "domingo", label: "Domingo" }
   ];
 
   const ESTADO_LABEL = {
