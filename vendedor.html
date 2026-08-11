@@ -10,7 +10,7 @@
 
 <div class="flag-bar"></div>
 <div class="topbar">
-  <div class="brand"><img class="topbar-logo" src="assets/logo.jpeg" alt="">El Pelao Erasmo · Vendedor</div>
+  <div class="brand">El Pelao Erasmo · Vendedor</div>
   <div class="user-chip">
     <span id="nombreVendedor">Cargando...</span>
     <button class="logout" onclick="cerrarSesion()">Salir</button>
@@ -18,6 +18,19 @@
 </div>
 
 <main class="shell">
+
+  <section class="card">
+    <h2 class="card-title">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+      Mi perfil
+    </h2>
+    <label>Nombre completo</label>
+    <input type="text" id="perfilNombre">
+    <label>Mi WhatsApp (para recibir los pedidos que ingreses)</label>
+    <input type="tel" id="perfilTelefono" placeholder="+56 9 1234 5678">
+    <button class="btn btn-secondary btn-block" style="margin-top:14px;" onclick="guardarMiPerfil()">Guardar cambios</button>
+    <p class="status-msg" id="perfilStatus"></p>
+  </section>
 
   <section class="card">
     <h2 class="card-title">
@@ -86,8 +99,22 @@
 
   <section class="card">
     <h2 class="card-title">
-      <svg class="icon" viewBox="0 0 24 24"><path d="M6 2h12v19l-2-1-2 1-2-1-2 1-2-1-2 1V2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
-      Mis pedidos
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
+      Comunas y días de reparto
+    </h2>
+    <p style="font-size:.85rem;color:#666;margin:0 0 10px;">Referencia para coordinar con el cliente antes de guardar el pedido.</p>
+    <div id="comunasWrap">
+      <p class="empty-state">Cargando comunas...</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title" style="justify-content:space-between;">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M6 2h12v19l-2-1-2 1-2-1-2 1-2-1-2 1V2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+        Mis pedidos
+      </span>
+      <button class="btn btn-secondary" style="padding:8px 12px;font-size:.8rem;" onclick="descargarMisVentas()">Descargar Excel</button>
     </h2>
     <div id="misPedidosWrap">
       <p class="empty-state">Cargando tus pedidos...</p>
@@ -97,6 +124,7 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="assets/supabase-client.js"></script>
 <script src="assets/pricing.js"></script>
 <script src="assets/auth-guard.js"></script>
@@ -116,20 +144,112 @@
     if (!perfil) return;
     perfilActual = perfil;
     document.getElementById("nombreVendedor").textContent = perfil.nombre_completo;
+    document.getElementById("perfilNombre").value = perfil.nombre_completo || "";
+    document.getElementById("perfilTelefono").value = perfil.telefono_whatsapp || "";
     cargarMisPedidos();
-    cargarPreciosVigentes();
+    cargarComunas();
   });
 
-  // Carga los precios vigentes (los que el admin haya configurado) — si
-  // falla, el formulario sigue funcionando con los precios de respaldo de
-  // assets/pricing.js.
-  async function cargarPreciosVigentes() {
-    try {
-      const resp = await fetch("/api/precios-publicos");
-      const datos = await resp.json();
-      aplicarPrecios(datos);
-      actualizarTotales();
-    } catch (e) { /* sigue con los precios de respaldo */ }
+  async function guardarMiPerfil() {
+    const status = document.getElementById("perfilStatus");
+    status.className = "status-msg";
+    status.textContent = "";
+
+    const nombre = document.getElementById("perfilNombre").value.trim();
+    const telefono = document.getElementById("perfilTelefono").value.trim();
+
+    if (!nombre) {
+      status.classList.add("error");
+      status.textContent = "El nombre no puede quedar vacío.";
+      return;
+    }
+
+    const { error } = await supa
+      .from("perfiles")
+      .update({ nombre_completo: nombre, telefono_whatsapp: telefono || null })
+      .eq("id", perfilActual.id);
+
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo guardar: " + error.message;
+      return;
+    }
+
+    perfilActual.nombre_completo = nombre;
+    perfilActual.telefono_whatsapp = telefono;
+    document.getElementById("nombreVendedor").textContent = nombre;
+    status.classList.add("ok");
+    status.textContent = "Perfil actualizado correctamente.";
+  }
+
+  async function cargarComunas() {
+    const wrap = document.getElementById("comunasWrap");
+    const { data, error } = await supa
+      .from("comunas_rutas")
+      .select("comuna, dia_reparto, precio_despacho, activa")
+      .order("comuna", { ascending: true });
+
+    if (error || !data) {
+      wrap.innerHTML = `<p class="empty-state">No se pudieron cargar las comunas.</p>`;
+      return;
+    }
+
+    const DIA_LABEL = {
+      lunes: "Lunes", martes: "Martes", miercoles: "Miércoles",
+      jueves: "Jueves", viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
+      sin_asignar: "Sin ruta asignada"
+    };
+
+    const filas = data.map(c => `
+      <tr>
+        <td>${c.comuna}</td>
+        <td>${c.activa === false ? '<span class="badge badge-anulado">No disponible</span>' : (DIA_LABEL[c.dia_reparto] || c.dia_reparto || "-")}</td>
+        <td>${c.precio_despacho != null ? money(c.precio_despacho) : "-"}</td>
+      </tr>
+    `).join("");
+
+    wrap.innerHTML = `
+      <table class="orders">
+        <thead>
+          <tr><th>Comuna</th><th>Día de reparto</th><th>Despacho</th></tr>
+        </thead>
+        <tbody>${filas}</tbody>
+      </table>
+    `;
+  }
+
+  async function descargarMisVentas() {
+    const { data, error } = await supa
+      .from("pedidos")
+      .select("fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, total, forma_pago, estado, dia_reparto, creado_en")
+      .order("creado_en", { ascending: false });
+
+    if (error || !data || data.length === 0) {
+      alert("No hay ventas para exportar todavía.");
+      return;
+    }
+
+    const filas = data.map(p => ({
+      "Fecha": p.fecha,
+      "Cliente": p.nombre_cliente,
+      "Teléfono": p.telefono,
+      "Dirección": `${p.direccion} ${p.numero}${p.departamento ? " Depto " + p.departamento : ""}`,
+      "Comuna": p.comuna,
+      "Región": p.region,
+      "Cant. Pipeño": p.cantidad_pipeno,
+      "Cant. Granadina": p.cantidad_granadina,
+      "Total": p.total,
+      "Forma de pago": p.forma_pago,
+      "Estado": ESTADO_LABEL[p.estado] || p.estado,
+      "Día de ruta": p.dia_reparto === "sin_asignar" ? "Sin ruta" : p.dia_reparto,
+      "Creado": p.creado_en
+    }));
+
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Mis ventas");
+    const nombreArchivo = `mis-ventas-${perfilActual.username}-${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(libro, nombreArchivo);
   }
 
   function actualizarTotales() {
