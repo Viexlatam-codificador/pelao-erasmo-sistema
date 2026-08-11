@@ -1273,7 +1273,7 @@ async function cargarDiasEspecialesPublico(){
 // región actual — lo comparten el resumen visible de entrada y el panel
 // lateral completo, para que nunca queden desincronizados entre sí.
 function construirHtmlZonasReparto(comunasRegion){
-  const DIA_LABEL = { lunes:"Lunes", martes:"Martes", miercoles:"Miércoles", jueves:"Jueves", viernes:"Viernes", sin_asignar:"Por confirmar" };
+  const DIA_LABEL = { lunes:"Lunes", martes:"Martes", miercoles:"Miércoles", jueves:"Jueves", viernes:"Viernes", sabado:"Sábado", domingo:"Domingo", sin_asignar:"Por confirmar" };
   const disponibles = comunasRegion.filter(c => c.activa !== false);
 
   // No mostramos el precio de despacho acá — este listado es solo para que
@@ -1288,7 +1288,7 @@ function construirHtmlZonasReparto(comunasRegion){
   });
 
   let html = "";
-  ["lunes","martes","miercoles","jueves","viernes","sin_asignar"].forEach(dia => {
+  ["lunes","martes","miercoles","jueves","viernes","sabado","domingo","sin_asignar"].forEach(dia => {
     if(!porDia[dia] || porDia[dia].length === 0) return;
     html += `<div class="comunas-dia-group"><h4>${DIA_LABEL[dia]}</h4><p>${porDia[dia].map(textoComuna).join(", ")}</p></div>`;
   });
