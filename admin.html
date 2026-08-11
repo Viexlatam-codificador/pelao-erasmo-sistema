@@ -1376,6 +1376,70 @@
   let pedidosCache = [];
   let pedidoExpandidoId = null;
   const pedidoHistorialCache = {};
+  // Estado de edición de productos/despacho del pedido abierto actualmente
+  // (se arma la primera vez que se abre el detalle, y se mantiene mientras
+  // esté abierto para poder agregar/quitar líneas sin perder lo ya tocado).
+  const edicionProductosCache = {};
+  const edicionDespachoCache = {};
+
+  function inicializarEdicionPedido(p) {
+    if (edicionProductosCache[p.id]) return;
+    let lineas = (p.detalle_productos || []).map(l => ({
+      nombre: l.nombre || "", unidad: l.unidad || "",
+      cantidad: Number(l.cantidad) || 0, precio_unitario: Number(l.precio_unitario) || 0
+    }));
+    // Compatibilidad con pedidos antiguos que no guardaron detalle_productos:
+    // se reconstruye la línea a partir de las columnas sueltas que sí tienen.
+    if (!lineas.length) {
+      if (p.cantidad_pipeno > 0) lineas.push({ nombre: "Pipeño 5 Litros", unidad: "bidón", cantidad: p.cantidad_pipeno, precio_unitario: p.precio_unitario_pipeno || 0 });
+      if (p.cantidad_granadina > 0) lineas.push({ nombre: "Granadina 700cc", unidad: "display", cantidad: p.cantidad_granadina, precio_unitario: 0 });
+    }
+    edicionProductosCache[p.id] = lineas;
+    const subtotalOriginal = lineas.reduce((a, l) => a + l.cantidad * l.precio_unitario, 0);
+    // El despacho no se guarda como columna aparte — se recupera restando el
+    // subtotal de productos al total ya guardado, así no se pierde el valor
+    // de despacho que tenía el pedido aunque no esté en su propia columna.
+    edicionDespachoCache[p.id] = Math.max(0, Math.round((p.total || 0) - subtotalOriginal));
+  }
+
+  function recalcularTotalEdicion(id) {
+    const lineas = edicionProductosCache[id] || [];
+    const subtotal = lineas.reduce((a, l) => a + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), 0);
+    const despacho = Number(edicionDespachoCache[id]) || 0;
+    const el = document.getElementById(`editTotalPreview_${id}`);
+    if (el) el.textContent = money(subtotal + despacho);
+    lineas.forEach((l, i) => {
+      const sub = document.getElementById(`editLineaSubtotal_${id}_${i}`);
+      if (sub) sub.textContent = money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0));
+    });
+  }
+
+  function marcarCambioLineaPedido(id, index, campo, valor) {
+    const lineas = edicionProductosCache[id];
+    if (!lineas || !lineas[index]) return;
+    lineas[index][campo] = (campo === "cantidad" || campo === "precio_unitario") ? (parseFloat(valor) || 0) : valor;
+    recalcularTotalEdicion(id);
+  }
+
+  function agregarLineaPedido(id) {
+    if (!edicionProductosCache[id]) edicionProductosCache[id] = [];
+    edicionProductosCache[id].push({ nombre: "", unidad: "", cantidad: 1, precio_unitario: 0 });
+    pedidoExpandidoId = id;
+    renderPedidosAdmin();
+  }
+
+  function quitarLineaPedido(id, index) {
+    const lineas = edicionProductosCache[id];
+    if (!lineas) return;
+    lineas.splice(index, 1);
+    pedidoExpandidoId = id;
+    renderPedidosAdmin();
+  }
+
+  function marcarCambioDespacho(id, valor) {
+    edicionDespachoCache[id] = parseFloat(valor) || 0;
+    recalcularTotalEdicion(id);
+  }
 
   async function cargarPedidosAdmin() {
     const wrap = document.getElementById("pedidosAdminWrap");
@@ -1475,8 +1539,21 @@
   }
 
   function renderDetallePedido(p) {
-    const productosTexto = nombreOtrosProductos(p);
     const historial = pedidoHistorialCache[p.id];
+    inicializarEdicionPedido(p);
+    const lineas = edicionProductosCache[p.id] || [];
+    const despacho = edicionDespachoCache[p.id] || 0;
+    const subtotalActual = lineas.reduce((a, l) => a + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), 0);
+
+    const filasProductos = lineas.map((l, i) => `
+      <tr>
+        <td><input type="text" style="min-width:110px;" value="${(l.nombre || "").replace(/"/g, "&quot;")}" placeholder="Nombre del producto" onchange="marcarCambioLineaPedido('${p.id}', ${i}, 'nombre', this.value)"></td>
+        <td><input type="number" min="0" style="width:64px;" value="${l.cantidad}" onchange="marcarCambioLineaPedido('${p.id}', ${i}, 'cantidad', this.value)"></td>
+        <td><input type="number" min="0" style="width:84px;" value="${l.precio_unitario}" onchange="marcarCambioLineaPedido('${p.id}', ${i}, 'precio_unitario', this.value)"></td>
+        <td style="font-size:.78rem;white-space:nowrap;" id="editLineaSubtotal_${p.id}_${i}">${money(l.cantidad * l.precio_unitario)}</td>
+        <td><button type="button" class="btn" style="background:#f2d4d1;color:var(--rojo);padding:4px 8px;font-size:.72rem;" onclick="quitarLineaPedido('${p.id}', ${i})">Quitar</button></td>
+      </tr>
+    `).join("");
 
     return `
       <tr class="fila-tramos">
@@ -1496,16 +1573,35 @@
               </div>
               <label>Comuna</label>
               <input type="text" id="editComuna_${p.id}" value="${p.comuna}">
+              <label>Forma de pago</label>
+              <select id="editFormaPago_${p.id}">
+                ${["Contra entrega", "Efectivo contra entrega", "Transferencia contra entrega"].map(fp =>
+                  `<option value="${fp}" ${p.forma_pago === fp ? "selected" : ""}>${fp}</option>`
+                ).join("")}
+              </select>
               <label>Observaciones</label>
               <textarea id="editObs_${p.id}">${p.observaciones || ""}</textarea>
               <button type="button" class="btn btn-primary" style="margin-top:10px;padding:8px 14px;font-size:.8rem;" onclick="guardarEdicionPedido('${p.id}')">Guardar cambios</button>
               <p class="status-msg" id="editStatus_${p.id}"></p>
             </div>
-            <div style="flex:1;min-width:220px;">
+            <div style="flex:1;min-width:280px;">
               <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 6px;">Productos del pedido</p>
-              <p style="font-size:.85rem;color:#444;">${productosTexto.length ? productosTexto.join("<br>") : "Sin detalle"}</p>
-              <p style="font-size:.85rem;color:#444;margin-top:6px;"><b>Forma de pago:</b> ${p.forma_pago || "-"}</p>
-              <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:14px 0 6px;">Historial</p>
+              <table class="orders comunas" style="font-size:.8rem;">
+                <thead><tr><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Subtotal</th><th></th></tr></thead>
+                <tbody>${filasProductos || '<tr><td colspan="5" style="color:#888;">Sin productos — agrega uno abajo.</td></tr>'}</tbody>
+              </table>
+              <button type="button" class="btn btn-secondary" style="margin-top:8px;padding:6px 12px;font-size:.76rem;" onclick="agregarLineaPedido('${p.id}')">+ Agregar producto</button>
+
+              <div style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                <div>
+                  <label style="margin:0;">Despacho ($)</label>
+                  <input type="number" min="0" style="width:110px;" value="${despacho}" onchange="marcarCambioDespacho('${p.id}', this.value)">
+                </div>
+                <p style="font-size:.85rem;color:#444;margin:0 0 8px;"><b>Total:</b> <span id="editTotalPreview_${p.id}">${money(subtotalActual + despacho)}</span></p>
+              </div>
+              <p style="font-size:.72rem;color:#888;margin-top:4px;">El total se recalcula solo al cambiar cantidades, precios o el despacho — no olvides tocar "Guardar cambios" para que quede guardado.</p>
+
+              <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:16px 0 6px;">Historial</p>
               <div id="historialWrap_${p.id}">
                 ${historial ? renderHistorialLista(historial) : '<p class="empty-state" style="padding:6px 0;">Cargando historial...</p>'}
               </div>
@@ -1565,6 +1661,23 @@
     const status = document.getElementById(`editStatus_${id}`);
     status.className = "status-msg";
 
+    // Líneas de producto editadas: se descartan las que quedaron sin nombre
+    // o en cantidad 0 (equivale a "quitar" el producto del pedido).
+    const lineasValidas = (edicionProductosCache[id] || [])
+      .filter(l => l.nombre && l.nombre.trim() && (Number(l.cantidad) || 0) > 0)
+      .map(l => ({
+        nombre: l.nombre.trim(),
+        unidad: l.unidad || "",
+        cantidad: Number(l.cantidad) || 0,
+        precio_unitario: Number(l.precio_unitario) || 0,
+        subtotal: (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0)
+      }));
+
+    const lineaPipeno = lineasValidas.find(l => /pipe.o\s*5/i.test(l.nombre));
+    const lineaGranadina = lineasValidas.find(l => /granadina/i.test(l.nombre));
+    const despacho = Number(edicionDespachoCache[id]) || 0;
+    const subtotalProductos = lineasValidas.reduce((a, l) => a + l.subtotal, 0);
+
     const payload = {
       nombre_cliente: document.getElementById(`editNombre_${id}`).value.trim(),
       telefono: document.getElementById(`editTelefono_${id}`).value.trim(),
@@ -1572,7 +1685,13 @@
       numero: document.getElementById(`editNumero_${id}`).value.trim(),
       departamento: document.getElementById(`editDepto_${id}`).value.trim() || null,
       comuna: document.getElementById(`editComuna_${id}`).value.trim(),
-      observaciones: document.getElementById(`editObs_${id}`).value.trim() || null
+      forma_pago: document.getElementById(`editFormaPago_${id}`).value,
+      observaciones: document.getElementById(`editObs_${id}`).value.trim() || null,
+      cantidad_pipeno: lineaPipeno ? lineaPipeno.cantidad : 0,
+      precio_unitario_pipeno: lineaPipeno ? lineaPipeno.precio_unitario : 0,
+      cantidad_granadina: lineaGranadina ? lineaGranadina.cantidad : 0,
+      detalle_productos: lineasValidas,
+      total: subtotalProductos + despacho
     };
 
     if (!payload.nombre_cliente || !payload.telefono || !payload.direccion || !payload.numero || !payload.comuna) {
@@ -1589,6 +1708,11 @@
     }
     status.classList.add("ok");
     status.textContent = "Pedido actualizado.";
+    // Se limpia la edición en memoria para que, si se vuelve a abrir este
+    // pedido, se reconstruya desde los datos ya guardados (no desde lo que
+    // había quedado editado localmente).
+    delete edicionProductosCache[id];
+    delete edicionDespachoCache[id];
     cargarPedidosAdmin();
   }
 
@@ -1599,6 +1723,8 @@
       alert("No se pudo eliminar: " + error.message);
       return;
     }
+    delete edicionProductosCache[id];
+    delete edicionDespachoCache[id];
     cargarPedidosAdmin();
     cargarResumenPedidos();
   }
