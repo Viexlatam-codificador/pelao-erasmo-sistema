@@ -127,16 +127,23 @@
         <option value="hoy">Hoy</option>
         <option value="manana">Mañana</option>
         <option value="fecha">Fecha específica</option>
-        <option value="dia">Día de la semana (cualquier fecha)</option>
+        <option value="dia">Día(s) de la semana (cualquier fecha)</option>
+        <option value="todos">Todos los pedidos (sin filtrar por día)</option>
       </select>
       <input type="date" id="rutaFecha" style="display:none;">
-      <select id="rutaDiaSemana" style="display:none;">
-        <option value="lunes">Lunes</option>
-        <option value="martes">Martes</option>
-        <option value="miercoles">Miércoles</option>
-        <option value="jueves">Jueves</option>
-        <option value="viernes">Viernes</option>
-      </select>
+    </div>
+    <div class="filtro-bar" id="rutaDiasSemanaWrap" style="display:none;flex-direction:column;align-items:flex-start;gap:6px;">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <label class="toggle-disponible"><input type="checkbox" class="rutaDiaCheckbox" value="lunes"> Lunes</label>
+        <label class="toggle-disponible"><input type="checkbox" class="rutaDiaCheckbox" value="martes"> Martes</label>
+        <label class="toggle-disponible"><input type="checkbox" class="rutaDiaCheckbox" value="miercoles"> Miércoles</label>
+        <label class="toggle-disponible"><input type="checkbox" class="rutaDiaCheckbox" value="jueves"> Jueves</label>
+        <label class="toggle-disponible"><input type="checkbox" class="rutaDiaCheckbox" value="viernes"> Viernes</label>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:.72rem;" onclick="marcarTodosDiasRuta(true)">Marcar todos</button>
+        <button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:.72rem;" onclick="marcarTodosDiasRuta(false)">Desmarcar todos</button>
+      </div>
     </div>
     <div class="filtro-bar">
       <select id="rutaFiltroEstado" title="Filtrar por estado">
@@ -1598,7 +1605,11 @@
   function onCambioModoRuta() {
     const modo = document.getElementById("rutaModo").value;
     document.getElementById("rutaFecha").style.display = modo === "fecha" ? "block" : "none";
-    document.getElementById("rutaDiaSemana").style.display = modo === "dia" ? "block" : "none";
+    document.getElementById("rutaDiasSemanaWrap").style.display = modo === "dia" ? "flex" : "none";
+  }
+
+  function marcarTodosDiasRuta(marcar) {
+    document.querySelectorAll(".rutaDiaCheckbox").forEach(cb => { cb.checked = marcar; });
   }
 
   function diaSemanaDeFecha(fechaStr) {
@@ -1614,21 +1625,33 @@
 
     const camposPedido = "id, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, precio_unitario_pipeno, detalle_productos, total, forma_pago, estado, dia_reparto, vendedor_id";
 
-    let dia, fechaConcreta = null;
+    // diasFiltro = lista de días de reparto a incluir ("null" para el modo
+    // "todos", que no filtra por día en absoluto). fechaConcreta solo se usa
+    // para revisar días especiales de reparto (no aplica en modo "todos" ni
+    // "dia", porque ahí no hay una fecha exacta de referencia).
+    let diasFiltro = null, fechaConcreta = null;
     if (modo === "hoy" || modo === "manana") {
       const base = new Date();
       if (modo === "manana") base.setDate(base.getDate() + 1);
       fechaConcreta = base.toISOString().slice(0, 10);
-      dia = diaSemanaDeFecha(fechaConcreta);
+      const dia = diaSemanaDeFecha(fechaConcreta);
+      diasFiltro = [dia];
       rutaTituloActual = `Ruta ${modo === "hoy" ? "de hoy" : "de mañana"} (${fechaConcreta}) — ${DIAS.find(d => d.value === dia)?.label || dia}`;
     } else if (modo === "fecha") {
       fechaConcreta = document.getElementById("rutaFecha").value;
       if (!fechaConcreta) { wrap.innerHTML = '<p class="empty-state">Elige una fecha.</p>'; return; }
-      dia = diaSemanaDeFecha(fechaConcreta);
+      const dia = diaSemanaDeFecha(fechaConcreta);
+      diasFiltro = [dia];
       rutaTituloActual = `Ruta para el ${fechaConcreta} — ${DIAS.find(d => d.value === dia)?.label || dia}`;
+    } else if (modo === "dia") {
+      diasFiltro = Array.from(document.querySelectorAll(".rutaDiaCheckbox:checked")).map(cb => cb.value);
+      if (diasFiltro.length === 0) { wrap.innerHTML = '<p class="empty-state">Marca al menos un día de la semana.</p>'; return; }
+      const etiquetas = diasFiltro.map(d => DIAS.find(x => x.value === d)?.label || d);
+      rutaTituloActual = `Pedidos con día de reparto: ${etiquetas.join(", ")}`;
     } else {
-      dia = document.getElementById("rutaDiaSemana").value;
-      rutaTituloActual = `Pedidos con día de reparto "${DIAS.find(d => d.value === dia)?.label || dia}"`;
+      // modo === "todos": todos los pedidos, sin filtrar por día de reparto.
+      diasFiltro = null;
+      rutaTituloActual = "Todos los pedidos (sin filtrar por día de reparto)";
     }
 
     // Filtros adicionales: estado, vendedor, región y comuna — se aplican
@@ -1651,7 +1674,9 @@
       return query;
     }
 
-    const { data, error } = await aplicarFiltrosComunes(supa.from("pedidos").select(camposPedido).eq("dia_reparto", dia));
+    let queryPrincipal = supa.from("pedidos").select(camposPedido);
+    if (diasFiltro) queryPrincipal = queryPrincipal.in("dia_reparto", diasFiltro);
+    const { data, error } = await aplicarFiltrosComunes(queryPrincipal);
     if (error) {
       wrap.innerHTML = `<p class="empty-state">No se pudo generar la ruta: ${error.message}</p>`;
       return;
@@ -1661,7 +1686,8 @@
     let pedidosExtra = [];
     // Si la fecha exacta de esta ruta tiene algún día especial activo, se
     // suman los pedidos de esa/esas comunas aunque su día habitual sea otro
-    // — sin duplicar los que ya venían por el filtro normal de arriba.
+    // — sin duplicar los que ya venían por el filtro normal de arriba. Solo
+    // aplica cuando hay una fecha exacta de referencia (hoy/mañana/fecha).
     if (fechaConcreta) {
       const { data: especiales } = await supa
         .from("dias_especiales_reparto")
@@ -1671,7 +1697,7 @@
 
       if (especiales && especiales.length) {
         const aplicaATodas = especiales.some(e => !e.comuna);
-        let queryExtra = aplicarFiltrosComunes(supa.from("pedidos").select(camposPedido).neq("dia_reparto", dia));
+        let queryExtra = aplicarFiltrosComunes(supa.from("pedidos").select(camposPedido).not("dia_reparto", "in", `(${diasFiltro.join(",")})`));
         if (!aplicaATodas) {
           const comunasEspeciales = especiales.map(e => e.comuna);
           queryExtra = queryExtra.or(comunasEspeciales.map(c => `comuna.ilike.${c}`).join(","));
