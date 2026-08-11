@@ -1770,19 +1770,32 @@
     if (!rutaActual.length) return;
     const filas = rutaActual.map(p => {
       const vendedor = vendedoresCache.find(v => v.id === p.vendedor_id);
-      const productos = [];
-      if (p.cantidad_pipeno > 0) productos.push(`Pipeño 5L x${p.cantidad_pipeno}`);
-      if (p.cantidad_granadina > 0) productos.push(`Granadina x${p.cantidad_granadina}`);
+
+      // Pipeño 2L viene siempre dentro de detalle_productos (es un producto
+      // "extra" agregado desde el catálogo del admin, no tiene su propia
+      // columna en la tabla pedidos como sí la tienen Pipeño 5L y Granadina).
+      // Cualquier otro producto que se agregue a futuro cae en "Otros
+      // productos" para no perder esa información en el Excel.
+      let cantidadPipeno2L = 0;
+      const otros = [];
       (p.detalle_productos || []).forEach(l => {
-        if (l.nombre && !/pipe.o 5|granadina/i.test(l.nombre)) productos.push(`${l.nombre} x${l.cantidad}`);
+        if (!l.nombre) return;
+        if (/pipe.o\s*5/i.test(l.nombre)) return; // ya está en su propia columna
+        if (/granadina/i.test(l.nombre)) return;   // ya está en su propia columna
+        if (/pipe.o\s*2/i.test(l.nombre)) { cantidadPipeno2L += l.cantidad || 0; return; }
+        otros.push(`${l.nombre} x${l.cantidad}`);
       });
+
       return {
         "Comuna": p.comuna,
         "Dirección": `${p.direccion} ${p.numero}${p.departamento ? " depto " + p.departamento : ""}`,
         "Cliente": p.nombre_cliente,
         "Teléfono": p.telefono,
         "Vendedor": vendedor ? vendedor.nombre_completo : "Sin vendedor",
-        "Productos": productos.join(", "),
+        "Pipeño 5L": p.cantidad_pipeno > 0 ? p.cantidad_pipeno : "",
+        "Granadina": p.cantidad_granadina > 0 ? p.cantidad_granadina : "",
+        "Pipeño 2L": cantidadPipeno2L > 0 ? cantidadPipeno2L : "",
+        "Otros productos": otros.join(", "),
         "Forma de pago": p.forma_pago,
         "Total": p.total,
         "Estado": ESTADO_LABEL[p.estado] || p.estado
