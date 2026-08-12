@@ -70,6 +70,7 @@
       <div class="resumen-card"><div class="num" id="resComunas">-</div><div class="lbl">Comunas cubiertas</div></div>
       <div class="resumen-card"><div class="num" id="resNoDisp">-</div><div class="lbl">No disponibles</div></div>
       <div class="resumen-card"><div class="num" id="resVendedores">-</div><div class="lbl">Vendedores activos</div></div>
+      <div class="resumen-card"><div class="num" id="resRepartidores">-</div><div class="lbl">Repartidores activos</div></div>
     </div>
   </section>
 
@@ -419,6 +420,47 @@
 
   <section class="card">
     <h2 class="card-title">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="1" y="7" width="15" height="13" rx="2"/><path d="M16 11h3l4 4v5h-7z"/><circle cx="6" cy="21" r="1.8"/><circle cx="17.5" cy="21" r="1.8"/></svg>
+      Repartidores
+    </h2>
+    <p style="font-size:.85rem;color:#666;margin:0 0 10px;">
+      La gente de terreno que reparte los pedidos. Tienen su propia página
+      (<code>reparto.html</code>) donde ven los pedidos listos para entregar,
+      pueden abrir la dirección directo en Google Maps y marcar cada pedido
+      como entregado apenas lo dejan. Edita nombre/WhatsApp o bloquéalos
+      igual que a un vendedor, y presiona "Guardar cambios".
+    </p>
+    <div id="repartidoresAdminWrap">
+      <p class="empty-state">Cargando repartidores...</p>
+    </div>
+    <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="guardarCambiosRepartidores()">Guardar cambios</button>
+    <p class="status-msg" id="repartidoresStatus"></p>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      Crear repartidor nuevo
+    </h2>
+    <p style="font-size:.85rem;color:#666;margin:0 0 10px;">
+      Se crea con acceso inmediato a <code>reparto.html</code> desde su
+      celular. Comparte el usuario y la contraseña con él por un canal
+      seguro.
+    </p>
+    <label>Usuario</label>
+    <input type="text" id="nuevoRepartidorUsername" placeholder="ej: reparto1" autocapitalize="none">
+    <label>Nombre completo</label>
+    <input type="text" id="nuevoRepartidorNombre" placeholder="Nombre y apellido">
+    <label>WhatsApp</label>
+    <input type="tel" id="nuevoRepartidorTelefono" placeholder="+56 9 1234 5678">
+    <label>Contraseña provisoria</label>
+    <input type="text" id="nuevoRepartidorPassword" placeholder="Mínimo 6 caracteres">
+    <button class="btn btn-secondary btn-block" style="margin-top:14px;" onclick="crearRepartidor()">Crear repartidor</button>
+    <p class="status-msg" id="nuevoRepartidorStatus"></p>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">
       <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="9" width="13" height="8"/><path d="M15 12h4l3 3v2h-7z"/><circle cx="7" cy="19" r="1.6"/><circle cx="18" cy="19" r="1.6"/></svg>
       Banner de delivery
     </h2>
@@ -547,6 +589,7 @@
     // necesita vendedoresCache para mostrar el nombre del vendedor de cada fila.
     await cargarVendedoresAdmin();
     cargarPedidosAdmin();
+    cargarRepartidoresAdmin();
   });
 
   document.getElementById("filtroComuna").addEventListener("input", renderComunas);
@@ -2147,6 +2190,177 @@
         document.getElementById(id).value = "";
       });
       cargarVendedoresAdmin();
+    } catch (e) {
+      status.classList.add("error");
+      status.textContent = "No se pudo conectar con el servidor. Verifica que el sitio esté desplegado en Vercel con la función /api configurada.";
+    }
+  }
+
+  // ==========================================================================
+  // REPARTIDORES (gente de terreno — página reparto.html)
+  // ==========================================================================
+  let repartidoresCache = [];
+  const repartidoresCambiados = new Set();
+
+  async function cargarRepartidoresAdmin() {
+    const { data, error } = await supa
+      .from("perfiles")
+      .select("id, username, nombre_completo, telefono_whatsapp, rol, activo")
+      .eq("rol", "repartidor")
+      .order("nombre_completo", { ascending: true });
+
+    if (error) {
+      document.getElementById("repartidoresAdminWrap").innerHTML = `<p class="empty-state">No se pudieron cargar los repartidores: ${error.message}</p>`;
+      return;
+    }
+    repartidoresCache = data || [];
+    document.getElementById("resRepartidores").textContent = repartidoresCache.filter(r => r.activo).length;
+    renderRepartidoresAdmin();
+  }
+
+  function renderRepartidoresAdmin() {
+    const wrap = document.getElementById("repartidoresAdminWrap");
+    if (repartidoresCache.length === 0) {
+      wrap.innerHTML = `<p class="empty-state">Todavía no hay repartidores creados.</p>`;
+      return;
+    }
+    const filas = repartidoresCache.map(r => `
+      <tr data-repartidor-id="${r.id}" class="${repartidoresCambiados.has(r.id) ? "fila-cambiada" : ""}">
+        <td>
+          <input type="text" value="${(r.nombre_completo || "").replace(/"/g, "&quot;")}"
+            onchange="marcarCambioRepartidor('${r.id}','nombre_completo', this.value)">
+          <span style="font-size:.72rem;color:#888;">@${r.username}</span>
+        </td>
+        <td>
+          <input type="tel" value="${(r.telefono_whatsapp || "").replace(/"/g, "&quot;")}" placeholder="+56 9 xxxx xxxx"
+            onchange="marcarCambioRepartidor('${r.id}','telefono_whatsapp', this.value)">
+        </td>
+        <td>
+          <label class="toggle-disponible">
+            <input type="checkbox" ${r.activo ? "checked" : ""} onchange="toggleActivoRepartidor('${r.id}', this.checked)">
+            ${r.activo ? "Activo" : "Bloqueado"}
+          </label>
+        </td>
+      </tr>
+    `).join("");
+
+    wrap.innerHTML = `
+      <table class="orders comunas">
+        <thead><tr><th>Repartidor</th><th>WhatsApp</th><th>Estado</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    `;
+  }
+
+  function marcarCambioRepartidor(id, campo, valor) {
+    const r = repartidoresCache.find(x => x.id === id);
+    if (!r) return;
+    r[campo] = valor.trim();
+    repartidoresCambiados.add(id);
+    const fila = document.querySelector(`tr[data-repartidor-id="${id}"]`);
+    if (fila) fila.classList.add("fila-cambiada");
+  }
+
+  async function guardarCambiosRepartidores() {
+    const status = document.getElementById("repartidoresStatus");
+    status.className = "status-msg";
+
+    if (repartidoresCambiados.size === 0) {
+      status.classList.add("error");
+      status.textContent = "No hay cambios pendientes por guardar.";
+      return;
+    }
+
+    status.textContent = "Guardando...";
+    let errores = 0;
+
+    for (const id of repartidoresCambiados) {
+      const r = repartidoresCache.find(x => x.id === id);
+      if (!r) continue;
+      if (!r.nombre_completo) {
+        errores++;
+        continue;
+      }
+      const { error } = await supa
+        .from("perfiles")
+        .update({ nombre_completo: r.nombre_completo, telefono_whatsapp: r.telefono_whatsapp || null })
+        .eq("id", id);
+      if (error) errores++;
+    }
+
+    repartidoresCambiados.clear();
+    await cargarRepartidoresAdmin();
+
+    if (errores > 0) {
+      status.classList.add("error");
+      status.textContent = `Se guardaron los cambios, pero ${errores} repartidor(es) no se pudieron actualizar (revisa que el nombre no quede vacío).`;
+    } else {
+      status.classList.add("ok");
+      status.textContent = "Cambios guardados correctamente.";
+    }
+  }
+
+  async function toggleActivoRepartidor(id, activo) {
+    const { error } = await supa.from("perfiles").update({ activo }).eq("id", id);
+    if (error) {
+      alert("No se pudo actualizar: " + error.message);
+      cargarRepartidoresAdmin();
+      return;
+    }
+    const r = repartidoresCache.find(x => x.id === id);
+    if (r) r.activo = activo;
+  }
+
+  async function crearRepartidor() {
+    const status = document.getElementById("nuevoRepartidorStatus");
+    status.className = "status-msg";
+
+    const username = document.getElementById("nuevoRepartidorUsername").value.trim().toLowerCase();
+    const nombre = document.getElementById("nuevoRepartidorNombre").value.trim();
+    const telefono = document.getElementById("nuevoRepartidorTelefono").value.trim();
+    const password = document.getElementById("nuevoRepartidorPassword").value;
+
+    if (!username || !nombre || !password) {
+      status.classList.add("error");
+      status.textContent = "Completa usuario, nombre y contraseña.";
+      return;
+    }
+    if (password.length < 6) {
+      status.classList.add("error");
+      status.textContent = "La contraseña debe tener al menos 6 caracteres.";
+      return;
+    }
+
+    status.textContent = "Creando...";
+
+    const { data: sessionData } = await supa.auth.getSession();
+    const token = sessionData && sessionData.session ? sessionData.session.access_token : null;
+    if (!token) {
+      status.classList.add("error");
+      status.textContent = "Tu sesión expiró, vuelve a iniciar sesión.";
+      return;
+    }
+
+    try {
+      const resp = await fetch("/api/crear-vendedor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ username, nombre_completo: nombre, telefono_whatsapp: telefono || null, password, rol: "repartidor" })
+      });
+      const resultado = await resp.json();
+
+      if (!resp.ok) {
+        status.classList.add("error");
+        status.textContent = resultado.error || "No se pudo crear el repartidor.";
+        return;
+      }
+
+      status.classList.add("ok");
+      status.textContent = `Repartidor "${nombre}" creado correctamente. Usuario: ${username}`;
+      ["nuevoRepartidorUsername", "nuevoRepartidorNombre", "nuevoRepartidorTelefono", "nuevoRepartidorPassword"].forEach(id => {
+        document.getElementById(id).value = "";
+      });
+      cargarRepartidoresAdmin();
     } catch (e) {
       status.classList.add("error");
       status.textContent = "No se pudo conectar con el servidor. Verifica que el sitio esté desplegado en Vercel con la función /api configurada.";
