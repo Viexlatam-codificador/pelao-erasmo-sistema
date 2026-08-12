@@ -12,7 +12,9 @@
 
 <div class="login-wrap">
   <div class="login-card">
-    <img class="login-logo" src="assets/logo.jpeg" alt="El Pelao Erasmo">
+    <svg width="40" height="40" viewBox="0 0 24 24" style="stroke:var(--verde);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;">
+      <path d="M7 3h10l-1.3 8a3.7 3.7 0 0 1-7.4 0L7 3z"/><line x1="12" y1="14" x2="12" y2="20"/><line x1="8" y1="21" x2="16" y2="21"/>
+    </svg>
     <h1>El Pelao Erasmo</h1>
     <p class="subtitle">Sistema interno de pedidos y rutas</p>
 
@@ -76,7 +78,8 @@
       return;
     }
 
-    window.location.href = perfil.rol === "admin" ? "admin.html" : "vendedor.html";
+    const PAGINA_POR_ROL = { admin: "admin.html", vendedor: "vendedor.html", repartidor: "reparto.html" };
+    window.location.href = PAGINA_POR_ROL[perfil.rol] || "vendedor.html";
   }
 
   document.getElementById("password").addEventListener("keydown", (e) => {
