@@ -14,6 +14,8 @@
 // sin autenticación (cumple "proteger las rutas internas").
 // ============================================================================
 
+const PAGINA_POR_ROL = { admin: "admin.html", vendedor: "vendedor.html", repartidor: "reparto.html" };
+
 async function requireSession({ rolesPermitidos }) {
   const { data: { session } } = await supa.auth.getSession();
 
@@ -42,7 +44,7 @@ async function requireSession({ rolesPermitidos }) {
 
   if (rolesPermitidos && !rolesPermitidos.includes(perfil.rol)) {
     // Usuario válido pero sin permiso para esta página: lo mandamos a la suya.
-    window.location.href = perfil.rol === "admin" ? "admin.html" : "vendedor.html";
+    window.location.href = PAGINA_POR_ROL[perfil.rol] || "vendedor.html";
     return null;
   }
 
