@@ -947,8 +947,24 @@ function despachoGratisVigente(){
 const UMBRAL_DESPACHO_GRATIS_PROMO = 3000;
 
 function calcularDespacho(regionKey, comunaRaw){
+  const comunaKeyVR = normalize(comunaRaw);
   if(regionKey !== "rm"){
-    return { price: 0, text: "Despacho V Región: se coordina semanalmente contigo." };
+    // V Región: igual que en RM, se muestra el valor real configurado por
+    // el admin para esa comuna (columna "Despacho ($)" en el panel) apenas
+    // el cliente la escribe. Si esa comuna todavía no tiene un valor
+    // cargado, se avisa que se coordina — pero ya no se oculta el precio
+    // cuando sí existe.
+    if(!comunaKeyVR){
+      return { price: 0, text: "Ingresa tu comuna para ver el valor de despacho en la V Región." };
+    }
+    const infoVR = buscarComuna(comunaRaw);
+    if(infoVR && infoVR.activa === false){
+      return { price: 0, text: `Por ahora no estamos despachando a ${comunaRaw}. Escríbenos por WhatsApp para coordinar.` };
+    }
+    if(infoVR && infoVR.precio_despacho != null){
+      return { price: infoVR.precio_despacho, text: `Despacho a ${comunaRaw}: ${money(infoVR.precio_despacho)}` };
+    }
+    return { price: 0, text: `Despacho a ${comunaRaw}: se coordina semanalmente contigo (aún no hay un valor fijo cargado para esta comuna).` };
   }
   const comunaKey = normalize(comunaRaw);
   const gratisVigente = despachoGratisVigente();
