@@ -66,16 +66,26 @@ module.exports = async function handler(req, res) {
     .single();
 
   if (perfilError || !perfilCaller || perfilCaller.rol !== "admin" || !perfilCaller.activo) {
-    res.status(403).json({ error: "Solo un administrador activo puede crear vendedores." });
+    res.status(403).json({ error: "Solo un administrador activo puede crear usuarios." });
     return;
   }
 
-  // 3) Validar los datos del nuevo vendedor.
+  // 3) Validar los datos del nuevo usuario. "rol" es opcional y por defecto
+  //    es "vendedor" (así el panel de admin puede seguir llamando a esta
+  //    misma función sin mandar rol); el panel de "Crear repartidor nuevo"
+  //    manda rol: "repartidor" explícitamente. Solo se aceptan esos dos
+  //    valores — nunca se puede crear un admin desde aquí.
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
   const username = (body.username || "").trim().toLowerCase();
   const nombreCompleto = (body.nombre_completo || "").trim();
   const telefonoWhatsapp = (body.telefono_whatsapp || "").trim() || null;
   const password = body.password || "";
+  const rol = (body.rol || "vendedor").trim().toLowerCase();
+
+  if (!["vendedor", "repartidor"].includes(rol)) {
+    res.status(400).json({ error: "Rol no válido." });
+    return;
+  }
 
   if (!username || !/^[a-z0-9._-]{3,40}$/.test(username)) {
     res.status(400).json({ error: "El usuario debe tener entre 3 y 40 caracteres (letras, números, puntos o guiones, sin espacios)." });
@@ -121,7 +131,7 @@ module.exports = async function handler(req, res) {
     username,
     nombre_completo: nombreCompleto,
     telefono_whatsapp: telefonoWhatsapp,
-    rol: "vendedor",
+    rol,
     activo: true
   });
 
