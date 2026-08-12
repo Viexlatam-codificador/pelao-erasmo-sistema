@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel Reparto — El Pelao Erasmo</title>
+<link rel="stylesheet" href="assets/brand.css">
+<style>
+  /* Ajuste solo para esta página: en el celular angosto, "El Pelao Erasmo ·
+     Vendedor/Admin" ya es justo de espacio, y esta página se usa siempre
+     desde el celular en la calle — así que acá el nombre se acorta si hace
+     falta, en vez de encimarse con el resto del encabezado. */
+  .topbar .brand{ flex-shrink:0; }
+  .topbar .user-chip span{ max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+</style>
+</head>
+<body>
+
+<div class="flag-bar"></div>
+<div class="topbar">
+  <div class="brand">🚚 Reparto</div>
+  <div class="user-chip">
+    <span id="nombreRepartidor">Cargando...</span>
+    <button class="logout" onclick="cerrarSesion()">Salir</button>
+  </div>
+</div>
+
+<main class="shell">
+
+  <section class="card">
+    <h2 class="card-title">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
+      Mi ruta
+    </h2>
+    <div class="day-chips" id="diaChipsWrap"></div>
+    <p id="progresoTexto" style="font-size:.85rem;color:#666;margin:10px 0 0;font-weight:700;"></p>
+    <div class="progress-wrap"><div class="progress-fill" id="progresoFill" style="width:0%;"></div></div>
+    <button class="btn btn-secondary btn-block" style="margin-top:14px;" onclick="cargarRuta()">🔄 Actualizar</button>
+  </section>
+
+  <div id="rutaWrap">
+    <p class="empty-state">Cargando tu ruta...</p>
+  </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="assets/supabase-client.js"></script>
+<script src="assets/auth-guard.js"></script>
+<script>
+  const DIAS = [
+    { value: "lunes", label: "Lunes" },
+    { value: "martes", label: "Martes" },
+    { value: "miercoles", label: "Miércoles" },
+    { value: "jueves", label: "Jueves" },
+    { value: "viernes", label: "Viernes" },
+    { value: "sabado", label: "Sábado" },
+    { value: "domingo", label: "Domingo" }
+  ];
+  const DIAS_POR_INDICE_JS = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+
+  function diaDeHoy() {
+    return DIAS_POR_INDICE_JS[new Date().getDay()];
+  }
+
+  let perfilActual = null;
+  let diaSeleccionado = diaDeHoy();
+  let esAdmin = false;
+
+  requireSession({ rolesPermitidos: ["repartidor", "admin"] }).then((perfil) => {
+    if (!perfil) return;
+    perfilActual = perfil;
+    esAdmin = perfil.rol === "admin";
+    document.getElementById("nombreRepartidor").textContent = perfil.nombre_completo;
+    renderChipsDias();
+    cargarRuta();
+  });
+
+  function renderChipsDias() {
+    const hoy = diaDeHoy();
+    const opciones = [{ value: hoy, label: "Hoy" }, ...DIAS, { value: "__todos__", label: "Todos" }];
+    const wrap = document.getElementById("diaChipsWrap");
+    wrap.innerHTML = opciones.map(o => `
+      <button type="button" class="day-chip ${o.value === diaSeleccionado ? "active" : ""}" onclick="elegirDia('${o.value}')">${o.label}</button>
+    `).join("");
+  }
+
+  function elegirDia(valor) {
+    diaSeleccionado = valor;
+    renderChipsDias();
+    cargarRuta();
+  }
+
+  function normalizarTelefonoWsp(telefonoRaw) {
+    let digitos = (telefonoRaw || "").replace(/\D/g, "");
+    if (!digitos) return null;
+    if (digitos.startsWith("56")) return digitos;
+    if (digitos.startsWith("9") && digitos.length === 9) return "56" + digitos;
+    if (digitos.length === 8) return "569" + digitos;
+    return digitos;
+  }
+
+  function linkGoogleMaps(p) {
+    const direccionCompleta = `${p.direccion} ${p.numero}${p.departamento ? " depto " + p.departamento : ""}, ${p.comuna}, Chile`;
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccionCompleta)}`;
+  }
+
+  function resumenProductos(p) {
+    const partes = [];
+    if (p.cantidad_pipeno > 0) partes.push(`${p.cantidad_pipeno} Pipeño 5L`);
+    if (p.cantidad_granadina > 0) partes.push(`${p.cantidad_granadina} Granadina`);
+    (p.detalle_productos || []).forEach(l => {
+      if (l && l.nombre && l.cantidad) partes.push(`${l.cantidad} ${l.nombre}`);
+    });
+    return partes.length ? partes.join(" · ") : "Sin detalle de productos";
+  }
+
+  let rutaCache = [];
+
+  async function cargarRuta() {
+    const wrap = document.getElementById("rutaWrap");
+    wrap.innerHTML = '<p class="empty-state">Cargando tu ruta...</p>';
+
+    const campos = "id, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, detalle_productos, total, forma_pago, estado, dia_reparto, observaciones";
+
+    let query = supa.from("pedidos").select(campos).in("estado", ["listo_despacho", "en_ruta", "entregado"]);
+    if (diaSeleccionado !== "__todos__") query = query.eq("dia_reparto", diaSeleccionado);
+
+    const { data, error } = await query;
+    if (error) {
+      wrap.innerHTML = `<p class="empty-state">No se pudo cargar la ruta: ${error.message}</p>`;
+      return;
+    }
+
+    rutaCache = (data || []).slice().sort((a, b) => {
+      // Pendientes de entregar primero, entregados al final.
+      const pa = a.estado === "entregado" ? 1 : 0;
+      const pb = b.estado === "entregado" ? 1 : 0;
+      if (pa !== pb) return pa - pb;
+      const c = a.comuna.localeCompare(b.comuna, "es");
+      return c !== 0 ? c : a.direccion.localeCompare(b.direccion, "es");
+    });
+
+    renderRuta();
+  }
+
+  function renderRuta() {
+    const wrap = document.getElementById("rutaWrap");
+
+    const total = rutaCache.length;
+    const entregados = rutaCache.filter(p => p.estado === "entregado").length;
+    document.getElementById("progresoTexto").textContent = total
+      ? `${entregados} de ${total} entregados`
+      : "Sin pedidos en esta vista todavía.";
+    document.getElementById("progresoFill").style.width = total ? `${Math.round((entregados / total) * 100)}%` : "0%";
+
+    if (total === 0) {
+      wrap.innerHTML = '<p class="empty-state">No hay pedidos listos para repartir en esta vista.</p>';
+      return;
+    }
+
+    wrap.innerHTML = rutaCache.map(p => renderTarjeta(p)).join("");
+  }
+
+  function renderTarjeta(p) {
+    const direccionTexto = `${p.direccion} ${p.numero}${p.departamento ? " depto " + p.departamento : ""}`;
+    const telWsp = normalizarTelefonoWsp(p.telefono);
+    const msjWsp = encodeURIComponent(`Hola ${p.nombre_cliente.split(" ")[0]}, te escribo de El Pelao Erasmo, voy en camino con tu pedido 🚚`);
+
+    let botonesEstado = "";
+    if (p.estado === "listo_despacho") {
+      botonesEstado = `
+        <button class="stop-btn-enruta" onclick="cambiarEstado('${p.id}','en_ruta')">🚚 Salí a repartir</button>
+        <button class="stop-btn-entregado" onclick="cambiarEstado('${p.id}','entregado')">✅ Entregado</button>
+      `;
+    } else if (p.estado === "en_ruta") {
+      botonesEstado = `<button class="stop-btn-entregado" onclick="cambiarEstado('${p.id}','entregado')">✅ Entregado</button>`;
+    } else {
+      botonesEstado = `<button class="stop-btn-entregado" disabled>✅ Entregado</button>`;
+    }
+
+    return `
+      <div class="stop-card estado-${p.estado}" data-pedido-id="${p.id}">
+        <div class="stop-top">
+          <div>
+            <div class="stop-comuna">${p.comuna}${p.dia_reparto && p.dia_reparto !== diaSeleccionado && diaSeleccionado === "__todos__" ? ` · ${p.dia_reparto}` : ""}</div>
+            <div class="stop-cliente">${p.nombre_cliente}</div>
+            <div class="stop-direccion">${direccionTexto}</div>
+          </div>
+          <span class="badge badge-${p.estado}">${ESTADO_LABEL[p.estado] || p.estado}</span>
+        </div>
+        <div class="stop-productos">${resumenProductos(p)}</div>
+        <div class="stop-meta">
+          <span>${p.forma_pago}</span>
+          <span style="font-weight:800;color:var(--verde-oscuro);">${money(p.total)}</span>
+        </div>
+        ${p.observaciones ? `<p style="font-size:.82rem;color:#886;background:#fff8e1;padding:6px 8px;border-radius:6px;margin:0 0 10px;">📝 ${p.observaciones}</p>` : ""}
+        <div class="stop-actions">
+          <a class="stop-btn-maps" href="${linkGoogleMaps(p)}" target="_blank" rel="noopener">📍 Ver mapa</a>
+          <a class="stop-btn-llamar" href="tel:${p.telefono}">📞 Llamar</a>
+          ${telWsp ? `<a class="stop-btn-whatsapp" href="https://wa.me/${telWsp}?text=${msjWsp}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ""}
+          ${botonesEstado}
+        </div>
+      </div>
+    `;
+  }
+
+  async function cambiarEstado(pedidoId, nuevoEstado) {
+    const tarjeta = document.querySelector(`[data-pedido-id="${pedidoId}"]`);
+    if (tarjeta) tarjeta.style.opacity = "0.5";
+
+    const { error } = await supa.rpc("marcar_pedido_estado", {
+      p_pedido_id: pedidoId,
+      p_nuevo_estado: nuevoEstado
+    });
+
+    if (error) {
+      alert("No se pudo actualizar: " + error.message);
+      if (tarjeta) tarjeta.style.opacity = "1";
+      return;
+    }
+
+    const p = rutaCache.find(x => x.id === pedidoId);
+    if (p) p.estado = nuevoEstado;
+    renderRuta();
+  }
+
+  function money(n) {
+    return "$" + Math.round(n || 0).toLocaleString("es-CL");
+  }
+
+  const ESTADO_LABEL = {
+    listo_despacho: "Listo p/ despacho",
+    en_ruta: "En ruta",
+    entregado: "Entregado"
+  };
+</script>
+
+</body>
+</html>
