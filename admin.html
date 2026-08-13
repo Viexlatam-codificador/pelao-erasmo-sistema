@@ -34,7 +34,9 @@
 
 <div class="flag-bar"></div>
 <div class="topbar">
-  <div class="brand">El Pelao Erasmo · Administrador</div>
+  <a class="brand" href="index.html" target="_blank" rel="noopener" title="Abrir la página de clientes en una pestaña nueva" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:6px;">
+    🌐 El Pelao Erasmo · Administrador
+  </a>
   <div class="user-chip">
     <span id="nombreAdmin">Cargando...</span>
     <button class="logout" onclick="cerrarSesion()">Salir</button>
@@ -176,14 +178,6 @@
     <div id="rutaWrap">
       <p class="empty-state">Elige una opción y presiona "Generar".</p>
     </div>
-    <button class="btn btn-secondary btn-block" style="margin-top:14px;display:none;" id="rutaEnviarBtn" onclick="enviarRutaAReparto()">🚚 Enviar esta ruta a reparto</button>
-    <p style="font-size:.78rem;color:#888;margin:4px 0 0;display:none;" id="rutaEnviarAyuda">
-      Esto pone en "Listo p/ despacho" los pedidos de esta lista que todavía
-      estén en Pendiente o Preparación — recién ahí los repartidores los ven
-      en su celular. Generar la ruta arriba NO hace esto solo, es un paso
-      aparte a propósito (para que puedas revisar antes de mandarla).
-    </p>
-    <p class="status-msg" id="rutaEnviarStatus"></p>
     <button class="btn btn-primary btn-block" style="margin-top:14px;display:none;" id="rutaExportarBtn" onclick="exportarRutaExcel()">Descargar Excel de esta ruta</button>
   </section>
 
@@ -1928,10 +1922,6 @@
     });
 
     document.getElementById("rutaExportarBtn").style.display = rutaActual.length ? "flex" : "none";
-    document.getElementById("rutaEnviarBtn").style.display = rutaActual.length ? "flex" : "none";
-    document.getElementById("rutaEnviarAyuda").style.display = rutaActual.length ? "block" : "none";
-    document.getElementById("rutaEnviarStatus").textContent = "";
-    document.getElementById("rutaEnviarStatus").className = "status-msg";
 
     // Texto que resume los filtros activos, para que quede claro en pantalla
     // y en el título del Excel exportado qué se está mirando exactamente.
@@ -1974,48 +1964,6 @@
         <tbody>${filas}</tbody>
       </table>
     `;
-  }
-
-  // Pasa a "Listo p/ despacho" los pedidos de la ruta que generaste arriba
-  // y que todavía estén en Pendiente o Preparación — es el paso que hace
-  // que los repartidores empiecen a verlos en reparto.html. Los que ya
-  // estaban Listo p/ despacho, En ruta o Entregado se dejan tal cual.
-  async function enviarRutaAReparto() {
-    const status = document.getElementById("rutaEnviarStatus");
-    status.className = "status-msg";
-    status.textContent = "";
-
-    if (!rutaActual.length) return;
-
-    const pendientesDeEnviar = rutaActual.filter(p => p.estado === "pendiente" || p.estado === "preparacion");
-    if (pendientesDeEnviar.length === 0) {
-      status.classList.add("ok");
-      status.textContent = "Todos los pedidos de esta lista ya estaban enviados a reparto.";
-      return;
-    }
-
-    const confirmado = confirm(
-      `Esto va a marcar ${pendientesDeEnviar.length} pedido(s) como "Listo p/ despacho", ` +
-      `así los repartidores los van a poder ver de inmediato en su celular. ¿Continuar?`
-    );
-    if (!confirmado) return;
-
-    status.textContent = "Enviando...";
-    const ids = pendientesDeEnviar.map(p => p.id);
-    const { error } = await supa
-      .from("pedidos")
-      .update({ estado: "listo_despacho" })
-      .in("id", ids);
-
-    if (error) {
-      status.classList.add("error");
-      status.textContent = "No se pudo enviar la ruta: " + error.message;
-      return;
-    }
-
-    status.classList.add("ok");
-    status.textContent = `${pendientesDeEnviar.length} pedido(s) enviados a reparto correctamente.`;
-    generarRuta();
   }
 
   function exportarRutaExcel() {
