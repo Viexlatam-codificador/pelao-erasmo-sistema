@@ -28,6 +28,17 @@
   .lote-bar{ background:#eef3ea; border:1px solid #d3e0cb; border-radius:10px; padding:12px; margin-bottom:14px; }
   .imagen-uploader{ background:#f6f8f4; border-radius:10px; padding:12px; margin-bottom:12px; }
   .imagen-uploader img{ max-width:220px; max-height:160px; border-radius:8px; display:block; margin:8px 0; object-fit:cover; }
+  /* Tabla de Pedidos con look de planilla: filas alternadas, bordes más
+     marcados y encabezado fijo al hacer scroll, para que no se vea todo
+     amontonado a medida que se van ingresando pedidos. */
+  table.pedidos-tabla{ border:1px solid #e3e3da; }
+  table.pedidos-tabla thead th{ position:sticky; top:0; background:#f6f8f4; z-index:1; border-bottom:2px solid #d8ddd0; }
+  table.pedidos-tabla tbody tr:nth-child(odd){ background:#fbfbf7; }
+  table.pedidos-tabla tbody tr:hover{ background:#f0f4ec; }
+  table.pedidos-tabla td, table.pedidos-tabla th{ border-right:1px solid #edede4; }
+  table.pedidos-tabla td:last-child, table.pedidos-tabla th:last-child{ border-right:none; }
+  table.pedidos-tabla input[type=date]{ padding:5px; font-size:.78rem; }
+  #pedidosAdminWrap{ max-height:70vh; overflow:auto; border-radius:8px; }
 </style>
 </head>
 <body>
@@ -178,7 +189,12 @@
     <div id="rutaWrap">
       <p class="empty-state">Elige una opción y presiona "Generar".</p>
     </div>
-    <button class="btn btn-primary btn-block" style="margin-top:14px;display:none;" id="rutaExportarBtn" onclick="exportarRutaExcel()">Descargar Excel de esta ruta</button>
+    <button class="btn btn-secondary btn-block" style="margin-top:14px;display:none;" id="rutaEnviarBtn" onclick="enviarRutaAReparto()">🚚 Enviar esta ruta a reparto</button>
+    <p style="font-size:.78rem;color:#888;margin:6px 0 0;display:none;" id="rutaEnviarAyuda">Marca como "Listo p/ despacho" los pedidos de esta ruta que todavía estén en pendiente o preparación, para que el repartidor los vea en su celular.</p>
+    <button class="btn btn-secondary btn-block" style="margin-top:10px;display:none;" id="rutaPasarMananaBtn" onclick="pasarPendientesAManana()">📦 Pasar los no entregados a la ruta de mañana</button>
+    <p style="font-size:.78rem;color:#888;margin:6px 0 0;display:none;" id="rutaPasarMananaAyuda">Para lo que quedó pendiente, en preparación, listo p/despacho o en ruta y NO se alcanzó a entregar hoy: lo mueve a la ruta de mañana en vez de perderlo. Lo ya entregado o anulado no se toca.</p>
+    <p class="status-msg" id="rutaEnviarStatus"></p>
+    <button class="btn btn-primary btn-block" style="margin-top:8px;display:none;" id="rutaExportarBtn" onclick="exportarRutaExcel()">Descargar Excel de esta ruta</button>
   </section>
 
   <section class="card">
@@ -390,6 +406,8 @@
       anteriores quedan intactos. Después de editar, presiona
       "Guardar cambios".
     </p>
+    <label>Semana a informar (para el botón "📄 PDF" de cada vendedor — elige cualquier día de esa semana)</label>
+    <input type="date" id="informeSemanaAdmin">
     <div id="vendedoresAdminWrap">
       <p class="empty-state">Cargando vendedores...</p>
     </div>
@@ -545,9 +563,12 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.js"></script>
 <script src="assets/supabase-client.js"></script>
 <script src="assets/pricing.js"></script>
 <script src="assets/auth-guard.js"></script>
+<script src="assets/informes.js"></script>
 <script>
   const DIAS = [
     { value: "", label: "Sin asignar" },
@@ -581,6 +602,7 @@
     if (!perfil) return;
     perfilActual = perfil;
     document.getElementById("nombreAdmin").textContent = perfil.nombre_completo;
+    document.getElementById("informeSemanaAdmin").value = new Date().toISOString().slice(0, 10);
     cargarComunasAdmin();
     cargarDiasEspecialesAdmin();
     cargarProductosAdmin();
@@ -1557,17 +1579,23 @@
       return;
     }
 
-    const filas = pedidosCache.map(p => {
+    const listaOrdenada = pedidosCache.slice().sort((a, b) => (b.creado_en || "").localeCompare(a.creado_en || ""));
+    const filas = listaOrdenada.map(p => {
       const vendedor = vendedoresCache.find(v => v.id === p.vendedor_id);
       const nombreVendedor = vendedor ? vendedor.nombre_completo : (p.vendedor_id ? "—" : "Sin vendedor");
+      const hora = p.creado_en ? new Date(p.creado_en).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }) : "-";
       const filaDetalle = pedidoExpandidoId === p.id ? renderDetallePedido(p) : "";
       return `
         <tr data-pedido-id="${p.id}">
-          <td>${p.fecha}<br><span style="font-size:.72rem;color:#888;">${p.dia_reparto === "sin_asignar" ? "Sin ruta" : (p.dia_reparto || "-")}</span></td>
+          <td>
+            <input type="date" value="${p.fecha}" style="width:132px;" onchange="cambiarFechaPedido('${p.id}', this.value)">
+            <div style="font-size:.72rem;color:#888;margin-top:2px;">${hora} h · ${p.dia_reparto === "sin_asignar" ? "Sin ruta" : (p.dia_reparto || "-")}</div>
+          </td>
           <td><strong>${p.nombre_cliente}</strong><br><span style="font-size:.72rem;color:#888;">${p.telefono}</span></td>
           <td>${p.comuna}</td>
           <td>${nombreVendedor}</td>
-          <td>${money(p.total)}</td>
+          <td style="font-size:.78rem;">${p.forma_pago}</td>
+          <td style="font-weight:700;">${money(p.total)}</td>
           <td>
             <select onchange="cambiarEstadoPedido('${p.id}', this.value)">
               ${Object.keys(ESTADO_LABEL).map(e => `<option value="${e}" ${e === p.estado ? "selected" : ""}>${ESTADO_LABEL[e]}</option>`).join("")}
@@ -1583,9 +1611,9 @@
     }).join("");
 
     wrap.innerHTML = `
-      <table class="orders comunas">
+      <table class="orders comunas pedidos-tabla">
         <thead>
-          <tr><th>Fecha</th><th>Cliente</th><th>Comuna</th><th>Vendedor</th><th>Total</th><th>Estado</th><th></th></tr>
+          <tr><th>Fecha / hora / ruta</th><th>Cliente</th><th>Comuna</th><th>Vendedor</th><th>Pago</th><th>Total</th><th>Estado</th><th></th></tr>
         </thead>
         <tbody>${filas}</tbody>
       </table>
@@ -1614,7 +1642,7 @@
 
     return `
       <tr class="fila-tramos">
-        <td colspan="7" style="background:#f9faf7;padding:12px;">
+        <td colspan="8" style="background:#f9faf7;padding:12px;">
           <div style="display:flex;gap:16px;flex-wrap:wrap;">
             <div style="flex:1;min-width:220px;">
               <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 6px;">Editar pedido</p>
@@ -1726,6 +1754,15 @@
     const p = pedidosCache.find(x => x.id === id);
     if (p) p.estado = nuevoEstado;
     delete pedidoHistorialCache[id]; // se recarga si vuelve a abrir el historial
+    cargarResumenPedidos();
+  }
+
+  async function cambiarFechaPedido(id, nuevaFecha) {
+    if (!nuevaFecha) return;
+    const { error } = await supa.from("pedidos").update({ fecha: nuevaFecha }).eq("id", id);
+    if (error) { alert("No se pudo cambiar la fecha: " + error.message); cargarPedidosAdmin(); return; }
+    const p = pedidosCache.find(x => x.id === id);
+    if (p) p.fecha = nuevaFecha;
     cargarResumenPedidos();
   }
 
@@ -1922,6 +1959,12 @@
     });
 
     document.getElementById("rutaExportarBtn").style.display = rutaActual.length ? "flex" : "none";
+    document.getElementById("rutaEnviarBtn").style.display = rutaActual.length ? "flex" : "none";
+    document.getElementById("rutaEnviarAyuda").style.display = rutaActual.length ? "block" : "none";
+    document.getElementById("rutaPasarMananaBtn").style.display = rutaActual.length ? "flex" : "none";
+    document.getElementById("rutaPasarMananaAyuda").style.display = rutaActual.length ? "block" : "none";
+    document.getElementById("rutaEnviarStatus").className = "status-msg";
+    document.getElementById("rutaEnviarStatus").textContent = "";
 
     // Texto que resume los filtros activos, para que quede claro en pantalla
     // y en el título del Excel exportado qué se está mirando exactamente.
@@ -2007,6 +2050,81 @@
     XLSX.writeFile(libro, `ruta-${rutaTituloActual.includes("mañana") ? "manana" : "reparto"}-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
+  // Marca como "Listo p/ despacho" los pedidos de la ruta actual que todavía
+  // estén en pendiente o preparación, para que el repartidor los vea en
+  // reparto.html. Los que ya están más avanzados (en_ruta, entregado) o
+  // anulados no se tocan.
+  async function enviarRutaAReparto() {
+    const status = document.getElementById("rutaEnviarStatus");
+    status.className = "status-msg";
+    status.textContent = "";
+    if (!rutaActual.length) return;
+
+    const pendientesDeEnviar = rutaActual.filter(p => p.estado === "pendiente" || p.estado === "preparacion");
+    if (pendientesDeEnviar.length === 0) {
+      status.classList.add("ok");
+      status.textContent = "No hay pedidos pendientes o en preparación en esta ruta — ya están todos más adelante.";
+      return;
+    }
+
+    const confirmado = confirm(`Esto va a marcar ${pendientesDeEnviar.length} pedido(s) como "Listo p/ despacho" para que el repartidor los vea en su celular. ¿Confirmas?`);
+    if (!confirmado) return;
+
+    const ids = pendientesDeEnviar.map(p => p.id);
+    const { error } = await supa.from("pedidos").update({ estado: "listo_despacho" }).in("id", ids);
+
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo enviar la ruta: " + error.message;
+      return;
+    }
+
+    status.classList.add("ok");
+    status.textContent = `${pendientesDeEnviar.length} pedido(s) enviados a reparto.`;
+    generarRuta();
+    cargarResumenPedidos();
+  }
+
+  // Lo que quedó SIN entregar en la ruta actual (pendiente, preparación,
+  // listo p/despacho o en ruta) se mueve a la ruta de mañana en vez de
+  // perderse — solo cambia el día de reparto (dia_reparto), no la fecha
+  // original del pedido ni nada más. Lo entregado o anulado no se toca.
+  async function pasarPendientesAManana() {
+    const status = document.getElementById("rutaEnviarStatus");
+    status.className = "status-msg";
+    status.textContent = "";
+    if (!rutaActual.length) return;
+
+    const noEntregados = rutaActual.filter(p => p.estado !== "entregado" && p.estado !== "anulado");
+    if (noEntregados.length === 0) {
+      status.classList.add("ok");
+      status.textContent = "No queda nada pendiente en esta ruta — todo está entregado o anulado.";
+      return;
+    }
+
+    const manana = new Date();
+    manana.setDate(manana.getDate() + 1);
+    const fechaManana = manana.toISOString().slice(0, 10);
+    const diaManana = diaSemanaDeFecha(fechaManana);
+    const etiquetaManana = DIAS.find(d => d.value === diaManana)?.label || diaManana;
+
+    const confirmado = confirm(`Esto va a mover ${noEntregados.length} pedido(s) que no se entregaron a la ruta de mañana (${etiquetaManana}, ${fechaManana}). Van a dejar de aparecer en la ruta de hoy. ¿Confirmas?`);
+    if (!confirmado) return;
+
+    const ids = noEntregados.map(p => p.id);
+    const { error } = await supa.from("pedidos").update({ dia_reparto: diaManana }).in("id", ids);
+
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo mover los pedidos: " + error.message;
+      return;
+    }
+
+    status.classList.add("ok");
+    status.textContent = `${noEntregados.length} pedido(s) movidos a la ruta de mañana (${etiquetaManana}).`;
+    generarRuta();
+  }
+
   // ==========================================================================
   // VENDEDORES
   // ==========================================================================
@@ -2072,15 +2190,43 @@
             ${v.activo ? "Activo" : "Bloqueado"}
           </label>
         </td>
+        <td>
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem;"
+            onclick="generarInformeVendedorAdmin('${v.id}', '${(v.nombre_completo || "").replace(/'/g, "\\'").replace(/"/g, "&quot;")}')">📄 PDF</button>
+        </td>
       </tr>
     `).join("");
 
     wrap.innerHTML = `
       <table class="orders comunas">
-        <thead><tr><th>Vendedor</th><th>WhatsApp</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Vendedor</th><th>WhatsApp</th><th>Estado</th><th>Informe</th></tr></thead>
         <tbody>${filas}</tbody>
       </table>
     `;
+  }
+
+  async function generarInformeVendedorAdmin(vendedorId, nombreVendedor) {
+    const status = document.getElementById("vendedoresStatus");
+    status.className = "status-msg";
+    status.textContent = "";
+
+    const fechaElegida = document.getElementById("informeSemanaAdmin").value;
+    const { desde, hasta } = rangoSemanaInforme(fechaElegida);
+
+    const { data, error } = await supa
+      .from("pedidos")
+      .select("id, fecha, nombre_cliente, comuna, cantidad_pipeno, cantidad_granadina, detalle_productos, forma_pago, total, estado")
+      .eq("vendedor_id", vendedorId)
+      .gte("fecha", desde)
+      .lte("fecha", hasta)
+      .order("fecha", { ascending: true });
+
+    if (error) { status.classList.add("error"); status.textContent = "No se pudo generar el informe: " + error.message; return; }
+    if (!data || data.length === 0) { status.classList.add("error"); status.textContent = `${nombreVendedor} no tiene pedidos entre el ${desde} y el ${hasta}.`; return; }
+
+    generarInformeSemanalPDF({ pedidos: data, nombreVendedor, desde, hasta });
+    status.classList.add("ok");
+    status.textContent = `Informe de ${nombreVendedor} descargado (semana ${desde} al ${hasta}).`;
   }
 
   function marcarCambioVendedor(id, campo, valor) {
