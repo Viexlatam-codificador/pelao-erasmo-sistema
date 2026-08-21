@@ -40,6 +40,38 @@
   table.pedidos-tabla td:last-child, table.pedidos-tabla th:last-child{ border-right:none; }
   table.pedidos-tabla input[type=date]{ padding:5px; font-size:.78rem; }
   #pedidosAdminWrap{ max-height:70vh; overflow:auto; border-radius:8px; }
+
+  /* Pestañas desplegables por región (comunas y pedidos), en vez de listas
+     largas todas mezcladas — se abren/cierran con un clic. */
+  details.region-grupo{ margin-bottom:10px; border:1px solid #e3e3da; border-radius:10px; overflow:hidden; }
+  details.region-grupo summary{
+    cursor:pointer; list-style:none; padding:10px 14px; background:#f6f8f4;
+    font-weight:700; color:var(--verde-oscuro); font-size:.88rem;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  details.region-grupo summary::-webkit-details-marker{ display:none; }
+  details.region-grupo summary::after{ content:"▸"; transition:transform .15s; color:#888; }
+  details.region-grupo[open] summary::after{ transform:rotate(90deg); }
+  details.region-grupo summary .region-conteo{ font-weight:400; color:#888; font-size:.75rem; }
+  details.region-grupo .region-contenido{ padding:10px; }
+  details.region-grupo table.orders{ margin:0; }
+
+  /* Modal de "Ver / Editar pedido" — se abre encima de todo, así la lista de
+     pedidos de atrás no se mueve ni pierde el scroll al abrir/cerrar. */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(20,30,15,.55); z-index:200;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:24px 12px; overflow-y:auto;
+  }
+  .modal-box{
+    background:#fff; border-radius:14px; max-width:760px; width:100%;
+    padding:20px; box-shadow:0 12px 40px rgba(0,0,0,.3); position:relative;
+  }
+  .modal-cerrar-btn{
+    position:absolute; top:12px; right:12px; background:#eee; border:none; border-radius:50%;
+    width:30px; height:30px; font-size:1rem; cursor:pointer; color:#555; line-height:1;
+  }
+  .icono-atencion-pedido{ color:var(--rojo); font-size:.9rem; margin-left:4px; }
 </style>
 </head>
 <body>
@@ -107,10 +139,16 @@
         <option value="listo_despacho">Listo p/ despacho</option>
         <option value="en_ruta">En ruta</option>
         <option value="entregado">Entregado</option>
+        <option value="rechazado">Rechazado</option>
         <option value="anulado">Anulado</option>
       </select>
       <select id="pedidosFiltroVendedor" onchange="cargarPedidosAdmin()">
         <option value="">Todos los vendedores</option>
+      </select>
+      <select id="pedidosFiltroRegion" onchange="cargarPedidosAdmin()">
+        <option value="">Todas las regiones</option>
+        <option value="Región Metropolitana">Región Metropolitana</option>
+        <option value="V Región">V Región</option>
       </select>
     </div>
     <div class="filtro-bar">
@@ -571,6 +609,10 @@
 
 </main>
 
+<div class="modal-overlay" id="modalPedidoOverlay" style="display:none;" onclick="if(event.target===this) cerrarModalPedido()">
+  <div class="modal-box" id="modalPedidoBox"></div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -600,6 +642,7 @@
     listo_despacho: "Listo p/ despacho",
     en_ruta: "En ruta",
     entregado: "Entregado",
+    rechazado: "Rechazado",
     anulado: "Anulado"
   };
 
@@ -712,13 +755,17 @@
     wrap.innerHTML = regiones.map(region => {
       const comunasRegion = lista.filter(c => c.region === region);
       return `
-        <h3 class="region-titulo">${region} <span style="font-weight:400;color:#888;font-size:.75rem;">(${comunasRegion.length} comuna${comunasRegion.length === 1 ? "" : "s"})</span></h3>
-        <table class="orders comunas">
-          <thead>
-            <tr><th style="width:34px;"></th><th>Comuna</th><th>Día de reparto</th><th>Despacho ($)</th><th>Disponibilidad</th></tr>
-          </thead>
-          <tbody>${comunasRegion.map(filaHtml).join("")}</tbody>
-        </table>
+        <details class="region-grupo" open>
+          <summary>${region} <span class="region-conteo">${comunasRegion.length} comuna${comunasRegion.length === 1 ? "" : "s"}</span></summary>
+          <div class="region-contenido">
+            <table class="orders comunas">
+              <thead>
+                <tr><th style="width:34px;"></th><th>Comuna</th><th>Día de reparto</th><th>Despacho ($)</th><th>Disponibilidad</th></tr>
+              </thead>
+              <tbody>${comunasRegion.map(filaHtml).join("")}</tbody>
+            </table>
+          </div>
+        </details>
       `;
     }).join("");
   }
@@ -1517,7 +1564,7 @@
     if (!edicionProductosCache[id]) edicionProductosCache[id] = [];
     edicionProductosCache[id].push({ nombre: "", unidad: "", cantidad: 1, precio_unitario: 0 });
     pedidoExpandidoId = id;
-    renderPedidosAdmin();
+    refrescarModalPedido();
   }
 
   function quitarLineaPedido(id, index) {
@@ -1525,7 +1572,7 @@
     if (!lineas) return;
     lineas.splice(index, 1);
     pedidoExpandidoId = id;
-    renderPedidosAdmin();
+    refrescarModalPedido();
   }
 
   function marcarCambioDespacho(id, valor) {
@@ -1539,12 +1586,13 @@
 
     let query = supa
       .from("pedidos")
-      .select("id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, precio_unitario_pipeno, cantidad_granadina, detalle_productos, observaciones, forma_pago, total, estado, dia_reparto, vendedor_id")
+      .select("id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, precio_unitario_pipeno, cantidad_granadina, detalle_productos, observaciones, forma_pago, total, estado, dia_reparto, vendedor_id, necesita_atencion_vendedor, motivo_rechazo, hora_entrega, envio_gratis")
       .order("creado_en", { ascending: false })
       .limit(300);
 
     const estado = document.getElementById("pedidosFiltroEstado").value;
     const vendedorId = document.getElementById("pedidosFiltroVendedor").value;
+    const region = document.getElementById("pedidosFiltroRegion").value;
     const desde = document.getElementById("pedidosFiltroDesde").value;
     const hasta = document.getElementById("pedidosFiltroHasta").value;
     const busqueda = document.getElementById("pedidosBusqueda").value.trim();
@@ -1553,6 +1601,7 @@
     if (estado) query = query.eq("estado", estado);
     if (vendedorId === "__sin_vendedor__") query = query.is("vendedor_id", null);
     else if (vendedorId) query = query.eq("vendedor_id", vendedorId);
+    if (region) query = query.eq("region", region);
     if (desde) query = query.gte("fecha", desde);
     if (hasta) query = query.lte("fecha", hasta);
     if (comunaFiltro) query = query.ilike("comuna", `%${comunaFiltro}%`);
@@ -1582,6 +1631,8 @@
   }
   const PIPENO5L_NOMBRE_ADMIN = "Pipeño 5L";
 
+  // Región Metropolitana primero, V Región después — mismo orden que la
+  // sección de comunas, para que la lista de pedidos quede igual de ordenada.
   function renderPedidosAdmin() {
     const wrap = document.getElementById("pedidosAdminWrap");
     const resumenTexto = document.getElementById("pedidosResumenTexto");
@@ -1593,18 +1644,18 @@
     }
 
     const listaOrdenada = pedidosCache.slice().sort((a, b) => (b.creado_en || "").localeCompare(a.creado_en || ""));
-    const filas = listaOrdenada.map(p => {
+
+    const filaHtml = (p) => {
       const vendedor = vendedoresCache.find(v => v.id === p.vendedor_id);
       const nombreVendedor = vendedor ? vendedor.nombre_completo : (p.vendedor_id ? "—" : "Sin vendedor");
       const hora = p.creado_en ? new Date(p.creado_en).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }) : "-";
-      const filaDetalle = pedidoExpandidoId === p.id ? renderDetallePedido(p) : "";
       return `
         <tr data-pedido-id="${p.id}">
           <td>
             <input type="date" value="${p.fecha}" style="width:132px;" onchange="cambiarFechaPedido('${p.id}', this.value)">
             <div style="font-size:.72rem;color:#888;margin-top:2px;">${hora} h · ${p.dia_reparto === "sin_asignar" ? "Sin ruta" : (p.dia_reparto || "-")}</div>
           </td>
-          <td><strong>${p.nombre_cliente}</strong><br><span style="font-size:.72rem;color:#888;">${p.telefono}</span></td>
+          <td><strong>${p.nombre_cliente}</strong>${p.necesita_atencion_vendedor ? '<span class="icono-atencion-pedido" title="Necesita atención del vendedor">⚠️</span>' : ""}<br><span style="font-size:.72rem;color:#888;">${p.telefono}</span></td>
           <td>${p.comuna}</td>
           <td>${nombreVendedor}</td>
           <td style="font-size:.78rem;">${p.forma_pago}</td>
@@ -1615,28 +1666,43 @@
             </select>
           </td>
           <td style="white-space:nowrap;">
-            <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="toggleDetallePedido('${p.id}')">${pedidoExpandidoId === p.id ? "Cerrar" : "Ver"}</button>
+            <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="abrirModalPedido('${p.id}')">Ver</button>
             <button type="button" class="btn" style="background:#f2d4d1;color:var(--rojo);padding:6px 10px;font-size:.75rem;" onclick="eliminarPedido('${p.id}')">Eliminar</button>
           </td>
         </tr>
-        ${filaDetalle}
+      `;
+    };
+
+    const regiones = [...new Set(listaOrdenada.map(p => p.region || "Sin región"))].sort((a, b) => ordenRegion(a) - ordenRegion(b));
+
+    wrap.innerHTML = regiones.map(region => {
+      const pedidosRegion = listaOrdenada.filter(p => (p.region || "Sin región") === region);
+      return `
+        <details class="region-grupo" open>
+          <summary>${region} <span class="region-conteo">${pedidosRegion.length} pedido${pedidosRegion.length === 1 ? "" : "s"}</span></summary>
+          <div class="region-contenido">
+            <table class="orders comunas pedidos-tabla">
+              <thead>
+                <tr><th>Fecha / hora / ruta</th><th>Cliente</th><th>Comuna</th><th>Vendedor</th><th>Pago</th><th>Total</th><th>Estado</th><th></th></tr>
+              </thead>
+              <tbody>${pedidosRegion.map(filaHtml).join("")}</tbody>
+            </table>
+          </div>
+        </details>
       `;
     }).join("");
-
-    wrap.innerHTML = `
-      <table class="orders comunas pedidos-tabla">
-        <thead>
-          <tr><th>Fecha / hora / ruta</th><th>Cliente</th><th>Comuna</th><th>Vendedor</th><th>Pago</th><th>Total</th><th>Estado</th><th></th></tr>
-        </thead>
-        <tbody>${filas}</tbody>
-      </table>
-    `;
 
     const totalMostrado = pedidosCache.reduce((a, p) => a + (p.estado !== "anulado" ? p.total : 0), 0);
     resumenTexto.textContent = `${pedidosCache.length} pedido(s) — suma ${money(totalMostrado)} (excluye anulados). Se muestran hasta 300 resultados más recientes según el filtro.`;
   }
 
-  function renderDetallePedido(p) {
+  // ==========================================================================
+  // MODAL "Ver / Editar pedido" — se abre encima de la lista sin tocarla, así
+  // el resto de los pedidos no se mueve ni pierde el scroll al abrir/cerrar
+  // (antes el detalle se insertaba dentro de la misma tabla y la recargaba
+  // entera, lo que hacía perder de vista el resto de los pedidos).
+  // ==========================================================================
+  function renderModalPedidoContenido(p) {
     const historial = pedidoHistorialCache[p.id];
     inicializarEdicionPedido(p);
     const lineas = edicionProductosCache[p.id] || [];
@@ -1654,74 +1720,75 @@
     `).join("");
 
     return `
-      <tr class="fila-tramos">
-        <td colspan="8" style="background:#f9faf7;padding:12px;">
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:220px;">
-              <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 6px;">Editar pedido</p>
-              <label style="margin-top:0;">Nombre cliente</label>
-              <input type="text" id="editNombre_${p.id}" value="${p.nombre_cliente}">
-              <label>Teléfono</label>
-              <input type="text" id="editTelefono_${p.id}" value="${p.telefono}">
-              <label>Dirección</label>
-              <input type="text" id="editDireccion_${p.id}" value="${p.direccion}">
-              <div style="display:flex;gap:8px;">
-                <div style="flex:1;"><label>Número</label><input type="text" id="editNumero_${p.id}" value="${p.numero}"></div>
-                <div style="flex:1;"><label>Depto</label><input type="text" id="editDepto_${p.id}" value="${p.departamento || ""}"></div>
-              </div>
-              <label>Comuna</label>
-              <input type="text" id="editComuna_${p.id}" value="${p.comuna}" onchange="sugerirDiaSegunComuna('${p.id}')">
-              <div style="display:flex;gap:8px;">
-                <div style="flex:1;">
-                  <label>Fecha del pedido</label>
-                  <input type="date" id="editFecha_${p.id}" value="${p.fecha}">
-                </div>
-                <div style="flex:1;">
-                  <label>Día de entrega/reparto</label>
-                  <select id="editDiaReparto_${p.id}">
-                    ${[["lunes","Lunes"],["martes","Martes"],["miercoles","Miércoles"],["jueves","Jueves"],["viernes","Viernes"],["sabado","Sábado"],["domingo","Domingo"],["sin_asignar","Sin asignar"]].map(([v,l]) =>
-                      `<option value="${v}" ${p.dia_reparto === v ? "selected" : ""}>${l}</option>`
-                    ).join("")}
-                  </select>
-                </div>
-              </div>
-              <p style="font-size:.72rem;color:#888;margin:2px 0 8px;">El "Día de entrega/reparto" es el que decide en qué ruta aparece este pedido al usar "Generar ruta" — cámbialo si la clienta pidió otro día distinto al habitual de su comuna.</p>
-              <label>Forma de pago</label>
-              <select id="editFormaPago_${p.id}">
-                ${["Contra entrega", "Efectivo contra entrega", "Transferencia contra entrega"].map(fp =>
-                  `<option value="${fp}" ${p.forma_pago === fp ? "selected" : ""}>${fp}</option>`
+      <button type="button" class="modal-cerrar-btn" onclick="cerrarModalPedido()">✕</button>
+      <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 10px;padding-right:30px;">Pedido de ${p.nombre_cliente}</p>
+      ${p.necesita_atencion_vendedor ? `<p style="font-size:.8rem;background:#fff3e0;color:#8a4b00;border-radius:8px;padding:8px 10px;margin:0 0 10px;">⚠️ Este pedido necesita atención del vendedor${p.motivo_rechazo ? ": " + p.motivo_rechazo : "."}</p>` : ""}
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:220px;">
+          <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 6px;">Editar pedido</p>
+          <label style="margin-top:0;">Nombre cliente</label>
+          <input type="text" id="editNombre_${p.id}" value="${p.nombre_cliente}">
+          <label>Teléfono</label>
+          <input type="text" id="editTelefono_${p.id}" value="${p.telefono}">
+          <label>Dirección</label>
+          <input type="text" id="editDireccion_${p.id}" value="${p.direccion}">
+          <div style="display:flex;gap:8px;">
+            <div style="flex:1;"><label>Número</label><input type="text" id="editNumero_${p.id}" value="${p.numero}"></div>
+            <div style="flex:1;"><label>Depto</label><input type="text" id="editDepto_${p.id}" value="${p.departamento || ""}"></div>
+          </div>
+          <label>Comuna</label>
+          <input type="text" id="editComuna_${p.id}" value="${p.comuna}" onchange="sugerirDiaSegunComuna('${p.id}')">
+          <div style="display:flex;gap:8px;">
+            <div style="flex:1;">
+              <label>Fecha del pedido</label>
+              <input type="date" id="editFecha_${p.id}" value="${p.fecha}">
+            </div>
+            <div style="flex:1;">
+              <label>Día de entrega/reparto</label>
+              <select id="editDiaReparto_${p.id}">
+                ${[["lunes","Lunes"],["martes","Martes"],["miercoles","Miércoles"],["jueves","Jueves"],["viernes","Viernes"],["sabado","Sábado"],["domingo","Domingo"],["sin_asignar","Sin asignar"]].map(([v,l]) =>
+                  `<option value="${v}" ${p.dia_reparto === v ? "selected" : ""}>${l}</option>`
                 ).join("")}
               </select>
-              <label>Observaciones</label>
-              <textarea id="editObs_${p.id}">${p.observaciones || ""}</textarea>
-              <button type="button" class="btn btn-primary" style="margin-top:10px;padding:8px 14px;font-size:.8rem;" onclick="guardarEdicionPedido('${p.id}')">Guardar cambios</button>
-              <p class="status-msg" id="editStatus_${p.id}"></p>
-            </div>
-            <div style="flex:1;min-width:280px;">
-              <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 6px;">Productos del pedido</p>
-              <table class="orders comunas" style="font-size:.8rem;">
-                <thead><tr><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Subtotal</th><th></th></tr></thead>
-                <tbody>${filasProductos || '<tr><td colspan="5" style="color:#888;">Sin productos — agrega uno abajo.</td></tr>'}</tbody>
-              </table>
-              <button type="button" class="btn btn-secondary" style="margin-top:8px;padding:6px 12px;font-size:.76rem;" onclick="agregarLineaPedido('${p.id}')">+ Agregar producto</button>
-
-              <div style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-                <div>
-                  <label style="margin:0;">Despacho ($)</label>
-                  <input type="number" min="0" style="width:110px;" value="${despacho}" onchange="marcarCambioDespacho('${p.id}', this.value)">
-                </div>
-                <p style="font-size:.85rem;color:#444;margin:0 0 8px;"><b>Total:</b> <span id="editTotalPreview_${p.id}">${money(subtotalActual + despacho)}</span></p>
-              </div>
-              <p style="font-size:.72rem;color:#888;margin-top:4px;">El total se recalcula solo al cambiar cantidades, precios o el despacho — no olvides tocar "Guardar cambios" para que quede guardado.</p>
-
-              <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:16px 0 6px;">Historial</p>
-              <div id="historialWrap_${p.id}">
-                ${historial ? renderHistorialLista(historial) : '<p class="empty-state" style="padding:6px 0;">Cargando historial...</p>'}
-              </div>
             </div>
           </div>
-        </td>
-      </tr>
+          <label>Hora de entrega (opcional)</label>
+          <input type="text" id="editHora_${p.id}" value="${p.hora_entrega || ""}" placeholder="Ej: 14 a 16 hrs">
+          <p style="font-size:.72rem;color:#888;margin:2px 0 8px;">El "Día de entrega/reparto" es el que decide en qué ruta aparece este pedido al usar "Generar ruta" — cámbialo si la clienta pidió otro día distinto al habitual de su comuna.</p>
+          <label>Forma de pago</label>
+          <select id="editFormaPago_${p.id}">
+            ${["Contra entrega", "Efectivo contra entrega", "Transferencia contra entrega"].map(fp =>
+              `<option value="${fp}" ${p.forma_pago === fp ? "selected" : ""}>${fp}</option>`
+            ).join("")}
+          </select>
+          <label>Observaciones</label>
+          <textarea id="editObs_${p.id}">${p.observaciones || ""}</textarea>
+          <button type="button" class="btn btn-primary" style="margin-top:10px;padding:8px 14px;font-size:.8rem;" onclick="guardarEdicionPedido('${p.id}')">Guardar cambios</button>
+          <p class="status-msg" id="editStatus_${p.id}"></p>
+        </div>
+        <div style="flex:1;min-width:280px;">
+          <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 6px;">Productos del pedido</p>
+          <table class="orders comunas" style="font-size:.8rem;">
+            <thead><tr><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Subtotal</th><th></th></tr></thead>
+            <tbody>${filasProductos || '<tr><td colspan="5" style="color:#888;">Sin productos — agrega uno abajo.</td></tr>'}</tbody>
+          </table>
+          <button type="button" class="btn btn-secondary" style="margin-top:8px;padding:6px 12px;font-size:.76rem;" onclick="agregarLineaPedido('${p.id}')">+ Agregar producto</button>
+
+          <div style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+            <div>
+              <label style="margin:0;">Despacho ($)</label>
+              <input type="number" min="0" style="width:110px;" value="${despacho}" onchange="marcarCambioDespacho('${p.id}', this.value)">
+            </div>
+            <p style="font-size:.85rem;color:#444;margin:0 0 8px;"><b>Total:</b> <span id="editTotalPreview_${p.id}">${money(subtotalActual + despacho)}</span></p>
+          </div>
+          <p style="font-size:.72rem;color:#888;margin-top:4px;">El total se recalcula solo al cambiar cantidades, precios o el despacho — no olvides tocar "Guardar cambios" para que quede guardado.</p>
+
+          <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:16px 0 6px;">Historial</p>
+          <div id="historialWrap_${p.id}">
+            ${historial ? renderHistorialLista(historial) : '<p class="empty-state" style="padding:6px 0;">Cargando historial...</p>'}
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -1735,14 +1802,13 @@
     `).join("");
   }
 
-  async function toggleDetallePedido(id) {
-    if (pedidoExpandidoId === id) {
-      pedidoExpandidoId = null;
-      renderPedidosAdmin();
-      return;
-    }
+  async function abrirModalPedido(id) {
+    const p = pedidosCache.find(x => x.id === id);
+    if (!p) return;
     pedidoExpandidoId = id;
-    renderPedidosAdmin();
+    document.getElementById("modalPedidoBox").innerHTML = renderModalPedidoContenido(p);
+    document.getElementById("modalPedidoOverlay").style.display = "flex";
+
     if (!pedidoHistorialCache[id]) {
       const { data, error } = await supa
         .from("historial")
@@ -1755,6 +1821,21 @@
         if (wrapHist) wrapHist.innerHTML = renderHistorialLista(pedidoHistorialCache[id]);
       }
     }
+  }
+
+  function cerrarModalPedido() {
+    pedidoExpandidoId = null;
+    document.getElementById("modalPedidoOverlay").style.display = "none";
+    document.getElementById("modalPedidoBox").innerHTML = "";
+  }
+
+  // Repinta solo el contenido del modal (por ejemplo al agregar/quitar una
+  // línea de producto) sin tocar la lista de pedidos de atrás.
+  function refrescarModalPedido() {
+    if (!pedidoExpandidoId) return;
+    const p = pedidosCache.find(x => x.id === pedidoExpandidoId);
+    if (!p) return;
+    document.getElementById("modalPedidoBox").innerHTML = renderModalPedidoContenido(p);
   }
 
   async function cambiarEstadoPedido(id, nuevoEstado) {
@@ -1809,13 +1890,16 @@
       comuna: document.getElementById(`editComuna_${id}`).value.trim(),
       fecha: document.getElementById(`editFecha_${id}`).value,
       dia_reparto: document.getElementById(`editDiaReparto_${id}`).value,
+      hora_entrega: document.getElementById(`editHora_${id}`).value.trim() || null,
       forma_pago: document.getElementById(`editFormaPago_${id}`).value,
       observaciones: document.getElementById(`editObs_${id}`).value.trim() || null,
       cantidad_pipeno: lineaPipeno ? lineaPipeno.cantidad : 0,
       precio_unitario_pipeno: lineaPipeno ? lineaPipeno.precio_unitario : 0,
       cantidad_granadina: lineaGranadina ? lineaGranadina.cantidad : 0,
       detalle_productos: lineasValidas,
-      total: subtotalProductos + despacho
+      total: subtotalProductos + despacho,
+      necesita_atencion_vendedor: false,
+      motivo_rechazo: null
     };
 
     if (!payload.nombre_cliente || !payload.telefono || !payload.direccion || !payload.numero || !payload.comuna || !payload.fecha) {
@@ -1849,6 +1933,7 @@
     }
     delete edicionProductosCache[id];
     delete edicionDespachoCache[id];
+    if (pedidoExpandidoId === id) cerrarModalPedido();
     cargarPedidosAdmin();
     cargarResumenPedidos();
   }
