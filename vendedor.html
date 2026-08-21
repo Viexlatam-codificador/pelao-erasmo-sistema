@@ -43,6 +43,7 @@
   .accion-inline-botones button{ flex:1; padding:9px; border-radius:8px; font-size:.8rem; font-weight:700; border:none; cursor:pointer; }
   .accion-inline-confirmar{ background:var(--verde-oscuro); color:#fff; }
   .accion-inline-cancelar{ background:#e5e5df; color:#444; }
+  .accion-inline-eliminar{ background:#f2d4d1; color:var(--rojo); }
 
   .producto-extra-row{ display:flex; gap:6px; margin-bottom:6px; align-items:center; }
   .producto-extra-row input{ box-sizing:border-box; }
@@ -326,6 +327,10 @@
   let productosExtraCache = [];
   let productoExtraSeq = 0;
   let edicionAbiertaId = null;
+  // Productos extra al editar un pedido YA existente (uno por pedido, para
+  // poder tener varias filas abiertas sin que se pisen entre sí).
+  const edicionProductosExtraCache = {};
+  let edicionProductoExtraSeq = 0;
   let plantillaAbiertaId = null;
 
   requireSession({ rolesPermitidos: ["vendedor", "admin"] }).then((perfil) => {
@@ -936,7 +941,7 @@
     if (filaPlantillas) { filaPlantillas.remove(); plantillaAbiertaId = null; }
 
     const filaExistente = document.getElementById(`edicionFila_${id}`);
-    if (filaExistente) { filaExistente.remove(); edicionAbiertaId = null; return; }
+    if (filaExistente) { filaExistente.remove(); edicionAbiertaId = null; delete edicionProductosExtraCache[id]; return; }
 
     if (edicionAbiertaId && edicionAbiertaId !== id) {
       document.getElementById(`edicionFila_${edicionAbiertaId}`)?.remove();
@@ -970,6 +975,7 @@
             <button type="button" class="accion-inline-cancelar" onclick="abrirEdicionPedidoVendedor('${p.id}')">Cancelar</button>
             <button type="button" class="accion-inline-confirmar" onclick="confirmarReactivarPedidoVendedor('${p.id}')">Reactivar pedido</button>
           </div>
+          <button type="button" class="accion-inline-eliminar" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;font-size:.8rem;font-weight:700;border:none;cursor:pointer;" onclick="eliminarPedidoPropioVendedor('${p.id}')">🗑️ Eliminar este pedido (no va a ir)</button>
           <p class="status-msg" id="reactivarStatus_${p.id}"></p>
         </div>
       </td>
@@ -1026,6 +1032,16 @@
     const fila = document.querySelector(`tr[data-mis-pedido-id="${p.id}"]`);
     if (!fila) return;
     const despachoActual = despachoActualDePedido(p);
+
+    // Se siembra la caja de productos extra de ESTE pedido con lo que ya
+    // tenía guardado (todo lo que no sea Pipeño ni Granadina).
+    edicionProductosExtraCache[p.id] = (p.detalle_productos || []).map(l => ({
+      id: ++edicionProductoExtraSeq,
+      nombre: l.nombre || "",
+      cantidad: l.cantidad || 0,
+      precio: l.precio_unitario != null ? l.precio_unitario : (l.precio || 0)
+    }));
+
     const tr = document.createElement("tr");
     tr.id = `edicionFila_${p.id}`;
     tr.innerHTML = `
@@ -1050,7 +1066,10 @@
             <div style="flex:1;min-width:120px;"><label>Precio especial c/u (opcional)</label><input type="number" min="0" id="ed_precioespecial_${p.id}" placeholder="Usar precio normal"></div>
             <div style="flex:1;min-width:120px;"><label>Displays Granadina</label><input type="number" min="0" id="ed_granadina_${p.id}" value="${p.cantidad_granadina}"></div>
           </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <label>Otros productos / precios especiales de este pedido</label>
+          <div id="ed_productosExtraWrap_${p.id}"></div>
+          <button type="button" class="btn btn-secondary" style="padding:8px 12px;font-size:.8rem;margin-top:4px;" onclick="agregarProductoExtraEdicion('${p.id}')">+ Agregar producto</button>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
             <div style="flex:1;min-width:140px;">
               <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="ed_enviogratis_${p.id}" style="width:auto;" ${p.envio_gratis ? "checked" : ""} onchange="onCambioEnvioGratisEdicion('${p.id}')"> Envío gratuito</label>
             </div>
@@ -1069,11 +1088,59 @@
             <button type="button" class="accion-inline-cancelar" onclick="abrirEdicionPedidoVendedor('${p.id}')">Cancelar</button>
             <button type="button" class="accion-inline-confirmar" onclick="guardarEdicionPedidoVendedor('${p.id}')">Guardar cambios</button>
           </div>
+          <button type="button" class="accion-inline-eliminar" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;font-size:.8rem;font-weight:700;border:none;cursor:pointer;" onclick="eliminarPedidoPropioVendedor('${p.id}')">🗑️ Eliminar este pedido (no va a ir)</button>
           <p class="status-msg" id="ed_status_${p.id}"></p>
         </div>
       </td>
     `;
     fila.after(tr);
+    renderProductosExtraEdicion(p.id);
+  }
+
+  // ==========================================================================
+  // PRODUCTOS EXTRA al editar un pedido ya existente (uno por pedido)
+  // ==========================================================================
+  function agregarProductoExtraEdicion(pedidoId) {
+    if (!edicionProductosExtraCache[pedidoId]) edicionProductosExtraCache[pedidoId] = [];
+    edicionProductosExtraCache[pedidoId].push({ id: ++edicionProductoExtraSeq, nombre: "", cantidad: 1, precio: 0 });
+    renderProductosExtraEdicion(pedidoId);
+  }
+
+  function quitarProductoExtraEdicion(pedidoId, lineaId) {
+    edicionProductosExtraCache[pedidoId] = (edicionProductosExtraCache[pedidoId] || []).filter(l => l.id !== lineaId);
+    renderProductosExtraEdicion(pedidoId);
+  }
+
+  function actualizarProductoExtraEdicion(pedidoId, lineaId, campo, valor) {
+    const l = (edicionProductosExtraCache[pedidoId] || []).find(l => l.id === lineaId);
+    if (l) l[campo] = valor;
+  }
+
+  function stepProductoExtraEdicion(pedidoId, lineaId, delta) {
+    const l = (edicionProductosExtraCache[pedidoId] || []).find(l => l.id === lineaId);
+    if (!l) return;
+    let v = (Number(l.cantidad) || 0) + delta;
+    if (v < 0) v = 0;
+    l.cantidad = v;
+    renderProductosExtraEdicion(pedidoId);
+  }
+
+  function renderProductosExtraEdicion(pedidoId) {
+    const wrap = document.getElementById(`ed_productosExtraWrap_${pedidoId}`);
+    if (!wrap) return;
+    const lineas = edicionProductosExtraCache[pedidoId] || [];
+    wrap.innerHTML = lineas.map(l => `
+      <div class="producto-extra-row">
+        <input type="text" placeholder="Nombre" value="${escAttr(l.nombre)}" style="flex:2;" oninput="actualizarProductoExtraEdicion('${pedidoId}',${l.id},'nombre',this.value)">
+        <div class="stepper-mini">
+          <button type="button" onclick="stepProductoExtraEdicion('${pedidoId}',${l.id},-1)">−</button>
+          <input type="number" min="1" placeholder="Cant" value="${l.cantidad}" oninput="actualizarProductoExtraEdicion('${pedidoId}',${l.id},'cantidad',this.value)">
+          <button type="button" onclick="stepProductoExtraEdicion('${pedidoId}',${l.id},1)">+</button>
+        </div>
+        <input type="number" min="0" placeholder="Precio c/u" value="${l.precio}" style="flex:1;" oninput="actualizarProductoExtraEdicion('${pedidoId}',${l.id},'precio',this.value)">
+        <button type="button" class="producto-extra-quitar" onclick="quitarProductoExtraEdicion('${pedidoId}',${l.id})">✕</button>
+      </div>
+    `).join("");
   }
 
   async function guardarEdicionPedidoVendedor(id) {
@@ -1107,12 +1174,21 @@
       return;
     }
 
+    const lineasExtra = (edicionProductosExtraCache[id] || [])
+      .filter(l => l.nombre && String(l.nombre).trim() && (Number(l.cantidad) || 0) > 0)
+      .map(l => ({
+        nombre: String(l.nombre).trim(),
+        cantidad: Number(l.cantidad) || 0,
+        precio_unitario: Number(l.precio) || 0,
+        subtotal: (Number(l.cantidad) || 0) * (Number(l.precio) || 0)
+      }));
+
     const regionKey = regionKeyFromLabel(p.region);
     const tier = tierFor(regionKey, cantidadPipeno);
     const precioUnitarioPipeno = (!isNaN(precioEspecial) && precioEspecial >= 0) ? precioEspecial : (tier ? tier.price : 0);
     const subtotalPipeno = cantidadPipeno * precioUnitarioPipeno;
     const subtotalGranadina = cantidadGranadina * GRANADINA_PRICE;
-    const subtotalExtras = (p.detalle_productos || []).reduce((s, l) => s + (l.subtotal || ((l.cantidad || 0) * (l.precio_unitario || 0))), 0);
+    const subtotalExtras = lineasExtra.reduce((s, l) => s + l.subtotal, 0);
     const total = subtotalPipeno + subtotalGranadina + subtotalExtras + montoDespacho;
 
     const payload = {
@@ -1123,6 +1199,7 @@
       cantidad_pipeno: cantidadPipeno,
       precio_unitario_pipeno: precioUnitarioPipeno,
       cantidad_granadina: cantidadGranadina,
+      detalle_productos: lineasExtra,
       envio_gratis: envioGratis,
       forma_pago: formaPago,
       observaciones: observaciones || null,
@@ -1145,6 +1222,7 @@
     status.classList.add("ok");
     status.textContent = "Pedido actualizado.";
     edicionAbiertaId = null;
+    delete edicionProductosExtraCache[id];
     await cargarMisPedidos();
     await cargarAlertasAtencion();
     mostrarDeshacer("Pedido actualizado", async () => {
@@ -1153,6 +1231,37 @@
       await cargarMisPedidos();
       await cargarAlertasAtencion();
     });
+  }
+
+  async function eliminarPedidoPropioVendedor(id) {
+    if (!confirm("¿Eliminar este pedido? Es para cuando el cliente ya no lo va a recibir. Vas a poder deshacerlo por unos segundos después de eliminarlo.")) return;
+
+    const pedidoOriginal = misPedidosCache.find(x => x.id === id);
+    // "misPedidosCache" no trae vendedor_id (no hace falta para mostrar la
+    // lista, RLS ya filtra por dueño) — se completa acá para que, si se
+    // deshace, el pedido quede de nuevo asignado a este mismo vendedor.
+    const backup = pedidoOriginal ? { ...pedidoOriginal, vendedor_id: perfilActual.id } : null;
+    const { error } = await supa.rpc("vendedor_eliminar_pedido_propio", { p_pedido_id: id });
+
+    if (error) {
+      alert("No se pudo eliminar: " + error.message);
+      return;
+    }
+
+    edicionAbiertaId = null;
+    delete edicionProductosExtraCache[id];
+    document.getElementById(`edicionFila_${id}`)?.remove();
+    await cargarMisPedidos();
+    await cargarAlertasAtencion();
+
+    if (backup) {
+      mostrarDeshacer("Pedido eliminado", async () => {
+        const { error: e2 } = await supa.rpc("restaurar_pedido_eliminado", { p_datos: backup });
+        if (e2) throw e2;
+        await cargarMisPedidos();
+        await cargarAlertasAtencion();
+      }, 10);
+    }
   }
 
   async function descargarMisVentas() {
