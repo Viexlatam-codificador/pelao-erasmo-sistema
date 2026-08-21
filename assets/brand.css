@@ -305,3 +305,41 @@ table.orders th{
   stroke-linejoin:round;
   flex-shrink:0;
 }
+
+/* ============================================================================
+   Toast "Deshacer" — aviso flotante compartido (admin / vendedor / reparto)
+   ============================================================================ */
+.toast-deshacer{
+  position:fixed;
+  left:50%;
+  bottom:-120px;
+  transform:translateX(-50%);
+  background:#222;
+  color:#fff;
+  padding:12px 14px;
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  box-shadow:0 6px 22px rgba(0,0,0,.28);
+  z-index:500;
+  max-width:92vw;
+  transition:bottom .25s ease;
+  overflow:hidden;
+}
+.toast-deshacer.visible{bottom:20px;}
+.toast-deshacer-msg{font-size:.85rem;flex:1;white-space:nowrap;}
+.toast-deshacer-btn{
+  background:var(--miel);
+  color:#4a3300;
+  border:none;
+  padding:8px 14px;
+  border-radius:8px;
+  font-weight:700;
+  font-size:.82rem;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.toast-deshacer-btn[disabled]{opacity:.6;cursor:default;}
+.toast-deshacer-barra{position:absolute;left:0;bottom:0;height:3px;width:100%;background:rgba(255,255,255,.15);}
+.toast-deshacer-barra-fill{height:100%;background:var(--miel);width:100%;}
