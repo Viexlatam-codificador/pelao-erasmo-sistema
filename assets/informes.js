@@ -1,10 +1,10 @@
 // ============================================================================
-// El Pelao Erasmo — Informes semanales de ventas en PDF
+// El Pelao Erasmo — Informes de ventas en PDF (diario / semanal / mensual)
 //
-// Se usa desde vendedor.html (cada vendedor descarga el suyo) y desde
-// admin.html (el admin descarga el de cualquier vendedor). Genera el PDF
-// enteramente en el navegador con jsPDF + jspdf-autotable — no requiere
-// backend ni guarda nada en el servidor.
+// Se usa desde vendedor.html (cada vendedor descarga el suyo, con sus propias
+// estadísticas) y desde admin.html (el admin descarga el de cualquier
+// vendedor). Genera el PDF enteramente en el navegador con jsPDF +
+// jspdf-autotable — no requiere backend ni guarda nada en el servidor.
 // ============================================================================
 
 const ESTADO_LABEL_INFORME = {
@@ -13,7 +13,8 @@ const ESTADO_LABEL_INFORME = {
   listo_despacho: "Listo p/ despacho",
   en_ruta: "En ruta",
   entregado: "Entregado",
-  anulado: "Anulado"
+  anulado: "Anulado",
+  rechazado: "Rechazado"
 };
 
 const ESTADOS_EN_CURSO_INFORME = ["pendiente", "preparacion", "listo_despacho", "en_ruta"];
@@ -38,6 +39,20 @@ function rangoSemanaInforme(fechaStr) {
   return { desde: formatoFechaInforme(lunes), hasta: formatoFechaInforme(domingo) };
 }
 
+// Un solo día: desde y hasta son la misma fecha.
+function rangoDiaInforme(fechaStr) {
+  const dia = fechaStr || formatoFechaInforme(new Date());
+  return { desde: dia, hasta: dia };
+}
+
+// Mes completo (del 1 al último día) del mes al que pertenece fechaStr.
+function rangoMesInforme(fechaStr) {
+  const base = fechaStr ? new Date(fechaStr + "T12:00:00") : new Date();
+  const primerDia = new Date(base.getFullYear(), base.getMonth(), 1);
+  const ultimoDia = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+  return { desde: formatoFechaInforme(primerDia), hasta: formatoFechaInforme(ultimoDia) };
+}
+
 function moneyInforme(n) {
   return "$" + Math.round(n || 0).toLocaleString("es-CL");
 }
@@ -52,7 +67,42 @@ function resumenProductosInforme(p) {
   return partes.length ? partes.join(", ") : "-";
 }
 
-function generarInformeSemanalPDF({ pedidos, nombreVendedor, desde, hasta }) {
+// Estadísticas de un conjunto de pedidos, pensadas para que el vendedor vea
+// de un vistazo cómo le fue: total vendido, ticket promedio, comuna donde
+// más vende, y cuántos bidones/displays movió en total. Se usa tanto en el
+// PDF como en la pantalla de "Mis pedidos" de vendedor.html.
+function calcularEstadisticasInforme(pedidos) {
+  const entregados = pedidos.filter((p) => p.estado === "entregado");
+  const enCurso = pedidos.filter((p) => ESTADOS_EN_CURSO_INFORME.includes(p.estado));
+  const anulados = pedidos.filter((p) => p.estado === "anulado");
+  const rechazados = pedidos.filter((p) => p.estado === "rechazado");
+
+  const totalEntregado = entregados.reduce((s, p) => s + (p.total || 0), 0);
+  const totalEnCurso = enCurso.reduce((s, p) => s + (p.total || 0), 0);
+  const totalPipeno = entregados.reduce((s, p) => s + (p.cantidad_pipeno || 0), 0);
+  const totalGranadina = entregados.reduce((s, p) => s + (p.cantidad_granadina || 0), 0);
+  const ticketPromedio = entregados.length ? totalEntregado / entregados.length : 0;
+
+  const porComuna = {};
+  entregados.forEach((p) => {
+    if (!p.comuna) return;
+    porComuna[p.comuna] = (porComuna[p.comuna] || 0) + (p.total || 0);
+  });
+  let comunaTop = null, comunaTopMonto = 0;
+  Object.entries(porComuna).forEach(([comuna, monto]) => {
+    if (monto > comunaTopMonto) { comunaTop = comuna; comunaTopMonto = monto; }
+  });
+
+  return {
+    entregados, enCurso, anulados, rechazados,
+    totalEntregado, totalEnCurso, totalPipeno, totalGranadina, ticketPromedio,
+    comunaTop, comunaTopMonto
+  };
+}
+
+// Genera el PDF para cualquier rango de fechas (día, semana o mes), con una
+// sección de estadísticas arriba de las tablas de siempre.
+function generarInformeVentasPDF({ pedidos, nombreVendedor, desde, hasta, tituloPeriodo }) {
   if (!window.jspdf || !window.jspdf.jsPDF) {
     alert("No se pudo generar el PDF: la librería no cargó. Revisa tu conexión e intenta de nuevo.");
     return;
@@ -60,31 +110,40 @@ function generarInformeSemanalPDF({ pedidos, nombreVendedor, desde, hasta }) {
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-
-  const entregados = pedidos.filter((p) => p.estado === "entregado");
-  const enCurso = pedidos.filter((p) => ESTADOS_EN_CURSO_INFORME.includes(p.estado));
-  const anulados = pedidos.filter((p) => p.estado === "anulado");
-
-  const totalEntregado = entregados.reduce((s, p) => s + (p.total || 0), 0);
-  const totalEnCurso = enCurso.reduce((s, p) => s + (p.total || 0), 0);
+  const stats = calcularEstadisticasInforme(pedidos);
+  const { entregados, enCurso, anulados, rechazados, totalEntregado, totalEnCurso, ticketPromedio, comunaTop } = stats;
 
   doc.setFontSize(16);
   doc.setTextColor(21, 87, 36);
-  doc.text("El Pelao Erasmo — Informe semanal de ventas", 14, 18);
+  doc.text(`El Pelao Erasmo — ${tituloPeriodo || "Informe de ventas"}`, 14, 18);
 
   doc.setFontSize(11);
   doc.setTextColor(60, 60, 60);
   doc.text(`Vendedor: ${nombreVendedor}`, 14, 27);
-  doc.text(`Semana: ${desde} al ${hasta}`, 14, 33);
+  doc.text(`Periodo: ${desde} al ${hasta}`, 14, 33);
   doc.text(`Generado: ${new Date().toLocaleString("es-CL")}`, 14, 39);
 
+  // ---- Estadísticas ----
   doc.setFontSize(12);
   doc.setTextColor(21, 87, 36);
-  doc.text(`Total realmente vendido (entregado): ${moneyInforme(totalEntregado)}  ·  ${entregados.length} pedido(s)`, 14, 49);
-  doc.setTextColor(138, 75, 0);
-  doc.text(`Total en curso (aún no entregado): ${moneyInforme(totalEnCurso)}  ·  ${enCurso.length} pedido(s)`, 14, 56);
+  doc.text("Tus estadísticas de este periodo", 14, 49);
+  doc.autoTable({
+    startY: 53,
+    theme: "plain",
+    styles: { fontSize: 9, cellPadding: 1.5 },
+    body: [
+      ["Vendido y entregado", `${moneyInforme(totalEntregado)}  (${entregados.length} pedido${entregados.length === 1 ? "" : "s"})`],
+      ["Todavía en curso", `${moneyInforme(totalEnCurso)}  (${enCurso.length} pedido${enCurso.length === 1 ? "" : "s"})`],
+      ["Ticket promedio (entregados)", moneyInforme(ticketPromedio)],
+      ["Bidones Pipeño 5L entregados", String(stats.totalPipeno)],
+      ["Displays Granadina entregados", String(stats.totalGranadina)],
+      ["Comuna donde más vendiste", comunaTop ? `${comunaTop} (${moneyInforme(stats.comunaTopMonto)})` : "-"],
+      ["Rechazados / reagendados", String(rechazados.length)],
+      ["Anulados", String(anulados.length)]
+    ]
+  });
 
-  let cursorY = 66;
+  let cursorY = doc.lastAutoTable.finalY + 8;
 
   doc.setFontSize(12);
   doc.setTextColor(21, 87, 36);
@@ -104,7 +163,7 @@ function generarInformeSemanalPDF({ pedidos, nombreVendedor, desde, hasta }) {
   } else {
     doc.setFontSize(9);
     doc.setTextColor(120, 120, 120);
-    doc.text("No hay pedidos entregados en esta semana.", 14, cursorY + 6);
+    doc.text("No hay pedidos entregados en este periodo.", 14, cursorY + 6);
     cursorY += 14;
   }
 
@@ -128,15 +187,21 @@ function generarInformeSemanalPDF({ pedidos, nombreVendedor, desde, hasta }) {
   } else {
     doc.setFontSize(9);
     doc.setTextColor(120, 120, 120);
-    doc.text("No hay pedidos en curso en esta semana.", 14, cursorY + 6);
+    doc.text("No hay pedidos en curso en este periodo.", 14, cursorY + 6);
     cursorY += 14;
   }
 
-  if (anulados.length) {
+  if (rechazados.length || anulados.length) {
     if (cursorY > 260) { doc.addPage(); cursorY = 18; }
     doc.setFontSize(9);
     doc.setTextColor(150, 40, 30);
-    doc.text(`Pedidos anulados en la semana (no se cuentan en los totales de arriba): ${anulados.length}`, 14, cursorY);
+    if (rechazados.length) {
+      doc.text(`Pedidos rechazados/reagendados en el periodo (no se cuentan en los totales de arriba): ${rechazados.length}`, 14, cursorY);
+      cursorY += 6;
+    }
+    if (anulados.length) {
+      doc.text(`Pedidos anulados en el periodo (no se cuentan en los totales de arriba): ${anulados.length}`, 14, cursorY);
+    }
   }
 
   const slugVendedor = (nombreVendedor || "vendedor")
@@ -144,5 +209,16 @@ function generarInformeSemanalPDF({ pedidos, nombreVendedor, desde, hasta }) {
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
-  doc.save(`informe-semanal-${slugVendedor}-${desde}.pdf`);
+  const slugPeriodo = (tituloPeriodo || "informe")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  doc.save(`${slugPeriodo}-${slugVendedor}-${desde}.pdf`);
+}
+
+// Se mantiene por compatibilidad con el código existente (admin.html la usa
+// tal cual) — ahora es un envoltorio del informe genérico de arriba.
+function generarInformeSemanalPDF({ pedidos, nombreVendedor, desde, hasta }) {
+  generarInformeVentasPDF({ pedidos, nombreVendedor, desde, hasta, tituloPeriodo: "Informe semanal de ventas" });
 }
