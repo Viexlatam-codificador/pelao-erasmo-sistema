@@ -294,6 +294,7 @@
 <script src="assets/pricing.js"></script>
 <script src="assets/auth-guard.js"></script>
 <script src="assets/informes.js"></script>
+<script src="assets/deshacer.js"></script>
 <script>
   const ESTADO_LABEL = {
     pendiente: "Pendiente",
@@ -983,6 +984,10 @@
     status.className = "status-msg";
     status.textContent = "Reactivando...";
 
+    const pAnterior = misPedidosCache.find(x => x.id === id);
+    const motivoAnterior = pAnterior ? pAnterior.motivo_rechazo : null;
+    const fechaAnterior = pAnterior ? pAnterior.fecha : null;
+
     const { error } = await supa.rpc("vendedor_reactivar_pedido_rechazado", { p_pedido_id: id, p_nueva_fecha: nuevaFecha });
     if (error) {
       status.classList.add("error");
@@ -995,6 +1000,18 @@
     await cargarMisPedidos();
     await cargarAlertasAtencion();
     abrirEdicionPedidoVendedor(id);
+    mostrarDeshacer("Pedido reactivado", async () => {
+      const { error: e2 } = await supa.rpc("deshacer_cambio_pedido", {
+        p_pedido_id: id,
+        p_estado: "rechazado",
+        p_fecha: fechaAnterior,
+        p_necesita_atencion_vendedor: true,
+        p_motivo_rechazo: motivoAnterior
+      });
+      if (e2) throw e2;
+      await cargarMisPedidos();
+      await cargarAlertasAtencion();
+    });
   }
 
   function onCambioEnvioGratisEdicion(id) {
@@ -1114,6 +1131,9 @@
       motivo_rechazo: null
     };
 
+    const valoresAnteriores = {};
+    Object.keys(payload).forEach(k => { valoresAnteriores[k] = p[k]; });
+
     const { error } = await supa.from("pedidos").update(payload).eq("id", id);
 
     if (error) {
@@ -1127,6 +1147,12 @@
     edicionAbiertaId = null;
     await cargarMisPedidos();
     await cargarAlertasAtencion();
+    mostrarDeshacer("Pedido actualizado", async () => {
+      const { error: e2 } = await supa.from("pedidos").update(valoresAnteriores).eq("id", id);
+      if (e2) throw e2;
+      await cargarMisPedidos();
+      await cargarAlertasAtencion();
+    });
   }
 
   async function descargarMisVentas() {
