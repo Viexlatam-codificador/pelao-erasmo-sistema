@@ -40,6 +40,37 @@
      acumulen todos los entregados históricos en la vista). */
   .filtro-entregados{ display:flex; align-items:center; gap:8px; margin-top:10px; font-size:.8rem; color:#666; }
   .filtro-entregados input[type="date"]{ border:1px solid #ccc; border-radius:6px; padding:6px 8px; font-size:.82rem; }
+
+  /* Historial de entregas: calendario semanal (se desliza horizontal en el
+     celular, como los chips de días) + exportar todo a Excel. */
+  .calendario-nav{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .calendario-nav-btn{
+    background:#f0f0e8; border:none; border-radius:8px; width:36px; height:36px;
+    font-size:1rem; cursor:pointer; color:var(--verde-oscuro); flex-shrink:0;
+  }
+  .calendario-nav-rango{ font-weight:700; font-size:.85rem; color:var(--verde-oscuro); text-align:center; flex:1; text-transform:capitalize; }
+  .calendario-hoy-btn{
+    display:block; margin:0 auto 12px; background:none; border:1px solid #d8d8d8; border-radius:8px;
+    padding:6px 12px; font-size:.72rem; font-weight:700; color:#555; cursor:pointer;
+  }
+  .calendario-semana{ display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; -webkit-overflow-scrolling:touch; }
+  .calendario-dia{
+    flex:0 0 auto; width:92px; background:#fff; border:1.5px solid #e3e3da; border-radius:12px;
+    padding:10px 6px; text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+  }
+  .calendario-dia.activo{ border-color:var(--verde-oscuro); background:#eef6ec; }
+  .calendario-dia.hoy .calendario-dia-num{ color:var(--rojo); }
+  .calendario-dia-nombre{ font-size:.66rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:.3px; }
+  .calendario-dia-num{ font-size:1.1rem; font-weight:800; color:#333; margin:2px 0 6px; }
+  .calendario-dia-entregados{ font-size:.76rem; font-weight:800; color:var(--verde-oscuro); }
+  .calendario-dia-monto{ font-size:.66rem; color:#888; margin-top:2px; }
+  .calendario-dia-rechazados{ font-size:.66rem; color:var(--rojo); font-weight:700; margin-top:2px; }
+  .calendario-dia-vacio{ font-size:.72rem; color:#bbb; margin-top:12px; }
+  .calendario-detalle-item{
+    display:flex; justify-content:space-between; align-items:center; gap:8px; padding:9px 10px;
+    background:#fff; border:1px solid #eee; border-radius:8px; margin-bottom:6px; font-size:.82rem;
+  }
+  .calendario-detalle-item:last-child{ margin-bottom:0; }
 </style>
 </head>
 <body>
@@ -85,9 +116,28 @@
     <p class="empty-state">Cargando tu ruta...</p>
   </div>
 
+  <section class="card">
+    <h2 class="card-title">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+      Historial de entregas
+    </h2>
+    <div class="calendario-nav">
+      <button type="button" class="calendario-nav-btn" onclick="cambiarSemanaCalendario(-1)">◀</button>
+      <span class="calendario-nav-rango" id="calendarioRangoTexto">Cargando semana...</span>
+      <button type="button" class="calendario-nav-btn" onclick="cambiarSemanaCalendario(1)">▶</button>
+    </div>
+    <button type="button" class="calendario-hoy-btn" onclick="irSemanaActualCalendario()">Ir a esta semana</button>
+    <div class="calendario-semana" id="calendarioSemanaWrap"></div>
+    <div id="calendarioDetalleWrap" style="margin-top:14px;"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:16px;" onclick="descargarHistorialCompleto()">📥 Descargar historial completo (Excel)</button>
+    <p style="font-size:.75rem;color:#888;margin:6px 0 0;">Incluye todos los pedidos que pasaron por reparto — listos para despacho, en ruta, entregados y rechazados — con su estado y todos los datos.</p>
+    <p class="status-msg" id="historialExcelStatus"></p>
+  </section>
+
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="assets/supabase-client.js"></script>
@@ -122,6 +172,7 @@
     document.getElementById("fechaEntregadosInput").value = fechaEntregadosSeleccionada;
     renderChipsDias();
     cargarRuta();
+    cargarCalendarioSemana();
   });
 
   function cambiarFechaEntregados(valor) {
@@ -467,6 +518,187 @@
     entregado: "Entregado",
     rechazado: "Rechazado"
   };
+
+  // ==========================================================================
+  // HISTORIAL DE ENTREGAS (calendario semanal + exportar todo a Excel)
+  // ==========================================================================
+  function lunesDeEstaSemanaCalendario(fecha) {
+    const d = new Date(fecha);
+    const dia = d.getDay();
+    const offset = dia === 0 ? -6 : 1 - dia;
+    d.setDate(d.getDate() + offset);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function formatoFechaCalendario(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  let calendarioSemanaInicio = lunesDeEstaSemanaCalendario(new Date());
+  let calendarioCache = [];
+  let calendarioDiaSeleccionado = null;
+
+  function cambiarSemanaCalendario(delta) {
+    calendarioSemanaInicio.setDate(calendarioSemanaInicio.getDate() + delta * 7);
+    calendarioDiaSeleccionado = null;
+    cargarCalendarioSemana();
+  }
+
+  function irSemanaActualCalendario() {
+    calendarioSemanaInicio = lunesDeEstaSemanaCalendario(new Date());
+    calendarioDiaSeleccionado = null;
+    cargarCalendarioSemana();
+  }
+
+  async function cargarCalendarioSemana() {
+    const inicio = new Date(calendarioSemanaInicio);
+    const fin = new Date(calendarioSemanaInicio);
+    fin.setDate(fin.getDate() + 6);
+    const desde = formatoFechaCalendario(inicio);
+    const hasta = formatoFechaCalendario(fin);
+
+    document.getElementById("calendarioRangoTexto").textContent =
+      `${inicio.toLocaleDateString("es-CL", { day: "numeric", month: "short" })} — ${fin.toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}`;
+
+    const { data, error } = await supa
+      .from("pedidos")
+      .select("id, fecha, nombre_cliente, comuna, total, estado, motivo_rechazo, hora_entrega")
+      .in("estado", ["entregado", "rechazado"])
+      .gte("fecha", desde)
+      .lte("fecha", hasta);
+
+    calendarioCache = error ? [] : (data || []);
+    renderCalendarioSemana();
+  }
+
+  function renderCalendarioSemana() {
+    const wrap = document.getElementById("calendarioSemanaWrap");
+    const hoyStr = new Date().toISOString().slice(0, 10);
+    const nombresDia = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+    const dias = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(calendarioSemanaInicio);
+      d.setDate(d.getDate() + i);
+      dias.push(d);
+    }
+
+    wrap.innerHTML = dias.map((d, i) => {
+      const fechaStr = formatoFechaCalendario(d);
+      const pedidosDia = calendarioCache.filter(p => p.fecha === fechaStr);
+      const entregados = pedidosDia.filter(p => p.estado === "entregado");
+      const rechazados = pedidosDia.filter(p => p.estado === "rechazado");
+      const montoTotal = entregados.reduce((s, p) => s + (p.total || 0), 0);
+      const esHoy = fechaStr === hoyStr;
+      const activo = fechaStr === calendarioDiaSeleccionado;
+      return `
+        <div class="calendario-dia ${esHoy ? "hoy" : ""} ${activo ? "activo" : ""}" onclick="seleccionarDiaCalendario('${fechaStr}')">
+          <div class="calendario-dia-nombre">${nombresDia[i]}</div>
+          <div class="calendario-dia-num">${d.getDate()}</div>
+          ${pedidosDia.length ? `
+            <div class="calendario-dia-entregados">✅ ${entregados.length}</div>
+            ${montoTotal ? `<div class="calendario-dia-monto">${money(montoTotal)}</div>` : ""}
+            ${rechazados.length ? `<div class="calendario-dia-rechazados">❌ ${rechazados.length}</div>` : ""}
+          ` : `<div class="calendario-dia-vacio">—</div>`}
+        </div>
+      `;
+    }).join("");
+
+    if (calendarioDiaSeleccionado) renderDetalleDiaCalendario();
+  }
+
+  function seleccionarDiaCalendario(fechaStr) {
+    calendarioDiaSeleccionado = calendarioDiaSeleccionado === fechaStr ? null : fechaStr;
+    renderCalendarioSemana();
+    renderDetalleDiaCalendario();
+  }
+
+  function renderDetalleDiaCalendario() {
+    const wrap = document.getElementById("calendarioDetalleWrap");
+    if (!calendarioDiaSeleccionado) { wrap.innerHTML = ""; return; }
+
+    const pedidosDia = calendarioCache
+      .filter(p => p.fecha === calendarioDiaSeleccionado)
+      .sort((a, b) => (a.nombre_cliente || "").localeCompare(b.nombre_cliente || "", "es"));
+
+    if (!pedidosDia.length) {
+      wrap.innerHTML = `<p class="empty-state">Sin entregas ese día.</p>`;
+      return;
+    }
+
+    const fechaLegible = new Date(calendarioDiaSeleccionado + "T12:00:00")
+      .toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+
+    wrap.innerHTML = `
+      <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 8px;text-transform:capitalize;">${fechaLegible}</p>
+      ${pedidosDia.map(p => `
+        <div class="calendario-detalle-item">
+          <div>
+            <strong>${p.nombre_cliente}</strong> · ${p.comuna}
+            <span class="badge badge-${p.estado}" style="margin-left:6px;">${ESTADO_LABEL[p.estado] || p.estado}</span>
+            ${p.motivo_rechazo ? `<div style="font-size:.72rem;color:#886;margin-top:2px;">📝 ${p.motivo_rechazo}</div>` : ""}
+          </div>
+          <div style="font-weight:800;color:var(--verde-oscuro);white-space:nowrap;">${money(p.total)}</div>
+        </div>
+      `).join("")}
+    `;
+  }
+
+  async function descargarHistorialCompleto() {
+    const status = document.getElementById("historialExcelStatus");
+    status.className = "status-msg";
+    status.textContent = "Preparando archivo...";
+
+    const campos = "fecha, hora_entrega, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, dia_reparto, cantidad_pipeno, cantidad_granadina, detalle_productos, forma_pago, total, estado, motivo_rechazo, envio_gratis, creado_en";
+    const { data, error } = await supa
+      .from("pedidos")
+      .select(campos)
+      .in("estado", ["listo_despacho", "en_ruta", "entregado", "rechazado"])
+      .order("fecha", { ascending: false })
+      .limit(2000);
+
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo generar el archivo: " + error.message;
+      return;
+    }
+    if (!data || !data.length) {
+      status.classList.add("error");
+      status.textContent = "No hay pedidos para exportar todavía.";
+      return;
+    }
+
+    const filas = data.map(p => ({
+      "Fecha": p.fecha,
+      "Hora entrega": p.hora_entrega || "-",
+      "Cliente": p.nombre_cliente,
+      "Teléfono": p.telefono,
+      "Dirección": `${p.direccion} ${p.numero}${p.departamento ? " Depto " + p.departamento : ""}`,
+      "Comuna": p.comuna,
+      "Región": p.region,
+      "Día de ruta": p.dia_reparto === "sin_asignar" ? "Sin ruta" : p.dia_reparto,
+      "Productos": resumenProductos(p),
+      "Forma de pago": p.forma_pago,
+      "Envío": p.envio_gratis ? "Gratis" : "Pagado",
+      "Total": p.total,
+      "Estado": ESTADO_LABEL[p.estado] || p.estado,
+      "Motivo rechazo/reagenda": p.motivo_rechazo || "-",
+      "Creado": p.creado_en
+    }));
+
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    hoja["!cols"] = [
+      { wch: 11 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 16 }, { wch: 20 }, { wch: 12 },
+      { wch: 28 }, { wch: 20 }, { wch: 9 }, { wch: 11 }, { wch: 14 }, { wch: 28 }, { wch: 20 }
+    ];
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Historial reparto");
+    XLSX.writeFile(libro, `historial-reparto-el-pelao-erasmo-${new Date().toISOString().slice(0,10)}.xlsx`);
+
+    status.classList.add("ok");
+    status.textContent = `Archivo descargado — ${data.length} pedido(s).`;
+  }
 </script>
 
 </body>
