@@ -350,6 +350,7 @@
   const edicionProductosExtraCache = {};
   let edicionProductoExtraSeq = 0;
   let plantillaAbiertaId = null;
+  let cotizacionGuardadaAbiertaId = null;
 
   requireSession({ rolesPermitidos: ["vendedor", "admin"] }).then((perfil) => {
     if (!perfil) return;
@@ -1141,6 +1142,7 @@
             <div class="stop-actions" style="justify-content:flex-start;flex-wrap:nowrap;">
               <a class="stop-btn-llamar" href="tel:${p.telefono}" title="Llamar">📞</a>
               ${telWsp ? `<button type="button" class="stop-btn-whatsapp" title="WhatsApp" onclick="toggleWhatsAppPlantillas('${p.id}')">💬</button>` : ""}
+              <button type="button" class="stop-btn-maps" title="Enviar cotización al cliente" onclick="toggleCotizacionGuardada('${p.id}')">🧾</button>
               ${filaEditable(p) ? `<button type="button" class="stop-btn-enruta" title="Editar" onclick="abrirEdicionPedidoVendedor('${p.id}')">✏️</button>` : ""}
             </div>
           </td>
@@ -1181,6 +1183,7 @@
     const filaEdicion = document.getElementById(`edicionFila_${edicionAbiertaId}`);
     if (filaEdicion) { filaEdicion.remove(); edicionAbiertaId = null; }
     if (plantillaAbiertaId) { document.getElementById(`plantillasFila_${plantillaAbiertaId}`)?.remove(); }
+    if (cotizacionGuardadaAbiertaId) { document.getElementById(`cotizacionGuardadaFila_${cotizacionGuardadaAbiertaId}`)?.remove(); cotizacionGuardadaAbiertaId = null; }
 
     plantillaAbiertaId = id;
     const p = misPedidosCache.find(x => x.id === id);
@@ -1212,6 +1215,95 @@
     toggleWhatsAppPlantillas(pedidoId);
   }
 
+  // ==========================================================================
+  // Enviar la cotización (imagen/PDF con logo) de un pedido YA guardado,
+  // directo desde "Mis pedidos" — disponible para cualquier pedido, esté o
+  // no en un estado editable, porque solo se comparte, no se modifica nada.
+  // ==========================================================================
+  function toggleCotizacionGuardada(id) {
+    const existente = document.getElementById(`cotizacionGuardadaFila_${id}`);
+    if (existente) { existente.remove(); cotizacionGuardadaAbiertaId = null; return; }
+
+    const filaEdicion = document.getElementById(`edicionFila_${edicionAbiertaId}`);
+    if (filaEdicion) { filaEdicion.remove(); edicionAbiertaId = null; }
+    const filaPlantillas = document.getElementById(`plantillasFila_${plantillaAbiertaId}`);
+    if (filaPlantillas) { filaPlantillas.remove(); plantillaAbiertaId = null; }
+    if (cotizacionGuardadaAbiertaId) { document.getElementById(`cotizacionGuardadaFila_${cotizacionGuardadaAbiertaId}`)?.remove(); }
+
+    cotizacionGuardadaAbiertaId = id;
+    const p = misPedidosCache.find(x => x.id === id);
+    const fila = document.querySelector(`tr[data-mis-pedido-id="${id}"]`);
+    if (!p || !fila) return;
+
+    const tr = document.createElement("tr");
+    tr.id = `cotizacionGuardadaFila_${id}`;
+    tr.innerHTML = `
+      <td colspan="6">
+        <div class="accion-inline-caja">
+          <label>Enviar cotización de este pedido al cliente</label>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn btn-primary" style="flex:1;font-size:.8rem;padding:9px;" onclick="compartirCotizacionImagenGuardada('${id}')">📤 Compartir (imagen)</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button type="button" class="btn btn-secondary" style="flex:1;font-size:.78rem;padding:8px;" onclick="descargarCotizacionJPGGuardada('${id}')">🖼️ JPG</button>
+            <button type="button" class="btn btn-secondary" style="flex:1;font-size:.78rem;padding:8px;" onclick="descargarCotizacionPDFGuardada('${id}')">📄 PDF</button>
+          </div>
+          <p class="status-msg" id="cotGuardadaStatus_${id}"></p>
+        </div>
+      </td>
+    `;
+    fila.after(tr);
+  }
+
+  // Arma los datos de la cotización a partir de lo que YA está guardado en
+  // el pedido (no depende de ningún formulario abierto).
+  function datosCotizacionDesdePedidoGuardado(p) {
+    const filas = [];
+    if (p.cantidad_pipeno > 0) {
+      const precio = p.precio_unitario_pipeno || 0;
+      filas.push({ nombre: "Pipeño 5L", cantidad: p.cantidad_pipeno, precio, subtotal: p.cantidad_pipeno * precio });
+    }
+    if (p.cantidad_granadina > 0) {
+      const precio = p.precio_unitario_granadina || GRANADINA_PRICE;
+      filas.push({ nombre: "Granadina", cantidad: p.cantidad_granadina, precio, subtotal: p.cantidad_granadina * precio });
+    }
+    (p.detalle_productos || []).forEach(l => {
+      const precio = l.precio_unitario != null ? l.precio_unitario : (l.precio || 0);
+      const cantidad = l.cantidad || 0;
+      filas.push({ nombre: l.nombre, cantidad, precio, subtotal: l.subtotal != null ? l.subtotal : cantidad * precio });
+    });
+
+    const subtotalProductos = filas.reduce((s, f) => s + f.subtotal, 0);
+    const despacho = p.envio_gratis ? 0 : Math.max(0, Math.round((p.total || 0) - subtotalProductos));
+
+    return {
+      nombreCliente: p.nombre_cliente || "Cliente",
+      direccionTexto: p.comuna ? `${p.direccion} ${p.numero}, ${p.comuna}` : "",
+      fechaTexto: p.fecha ? new Date(p.fecha + "T12:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "",
+      hora: p.hora_entrega || "",
+      envioGratis: !!p.envio_gratis,
+      filas,
+      despacho,
+      total: p.total || 0
+    };
+  }
+
+  async function compartirCotizacionImagenGuardada(id) {
+    const p = misPedidosCache.find(x => x.id === id);
+    if (!p) return;
+    await generarYCompartirCotizacionImagen(datosCotizacionDesdePedidoGuardado(p), `cotGuardadaStatus_${id}`);
+  }
+  async function descargarCotizacionJPGGuardada(id) {
+    const p = misPedidosCache.find(x => x.id === id);
+    if (!p) return;
+    await generarYDescargarCotizacionJPG(datosCotizacionDesdePedidoGuardado(p), `cotGuardadaStatus_${id}`);
+  }
+  async function descargarCotizacionPDFGuardada(id) {
+    const p = misPedidosCache.find(x => x.id === id);
+    if (!p) return;
+    await generarYDescargarCotizacionPDF(datosCotizacionDesdePedidoGuardado(p), `cotGuardadaStatus_${id}`);
+  }
+
   function despachoActualDePedido(p) {
     const subtotalPipeno = (p.cantidad_pipeno || 0) * (p.precio_unitario_pipeno || 0);
     const subtotalGranadina = (p.cantidad_granadina || 0) * (p.precio_unitario_granadina || GRANADINA_PRICE);
@@ -1223,6 +1315,7 @@
   function abrirEdicionPedidoVendedor(id) {
     const filaPlantillas = document.getElementById(`plantillasFila_${plantillaAbiertaId}`);
     if (filaPlantillas) { filaPlantillas.remove(); plantillaAbiertaId = null; }
+    if (cotizacionGuardadaAbiertaId) { document.getElementById(`cotizacionGuardadaFila_${cotizacionGuardadaAbiertaId}`)?.remove(); cotizacionGuardadaAbiertaId = null; }
 
     const filaExistente = document.getElementById(`edicionFila_${id}`);
     if (filaExistente) { filaExistente.remove(); edicionAbiertaId = null; delete edicionProductosExtraCache[id]; return; }
