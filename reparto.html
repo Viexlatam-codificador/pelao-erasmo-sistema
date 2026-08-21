@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel Reparto — El Pelao Erasmo</title>
 <link rel="stylesheet" href="assets/brand.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   /* Ajuste solo para esta página: en el celular angosto, "El Pelao Erasmo ·
      Vendedor/Admin" ya es justo de espacio, y esta página se usa siempre
@@ -36,7 +37,18 @@
     <p id="progresoTexto" style="font-size:.85rem;color:#666;margin:10px 0 0;font-weight:700;"></p>
     <div class="progress-wrap"><div class="progress-fill" id="progresoFill" style="width:0%;"></div></div>
     <button class="btn btn-secondary btn-block" style="margin-top:14px;" onclick="cargarRuta()">🔄 Actualizar</button>
+    <button class="btn btn-secondary btn-block" style="margin-top:10px;display:none;" id="rutaMapaBtn" onclick="toggleMapaRutaReparto()">🗺️ Ver mapa y ordenar mi ruta</button>
   </section>
+
+  <div id="mapaRutaRepartoWrap" style="display:none;">
+    <section class="card">
+      <p style="font-size:.78rem;color:#888;margin:0 0 8px;">Cada pin y cada parada tienen el mismo número y color, agrupados por comuna. Arrastra el ícono ⠿ de una parada para cambiar el orden en que vas a repartir (lo entregado no se muestra acá).</p>
+      <div id="mapaRutaRepartoMapa" style="height:300px;border-radius:10px;margin-bottom:10px;"></div>
+      <div id="mapaRutaRepartoLista"></div>
+      <button class="btn btn-primary btn-block" style="margin-top:10px;" onclick="guardarOrdenRutaReparto()">💾 Guardar este orden</button>
+      <p class="status-msg" id="mapaRutaRepartoStatus"></p>
+    </section>
+  </div>
 
   <div id="rutaWrap">
     <p class="empty-state">Cargando tu ruta...</p>
@@ -45,8 +57,11 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="assets/supabase-client.js"></script>
 <script src="assets/auth-guard.js"></script>
+<script src="assets/mapa-ruta.js"></script>
 <script>
   const DIAS = [
     { value: "lunes", label: "Lunes" },
@@ -121,7 +136,7 @@
     const wrap = document.getElementById("rutaWrap");
     wrap.innerHTML = '<p class="empty-state">Cargando tu ruta...</p>';
 
-    const campos = "id, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, detalle_productos, total, forma_pago, estado, dia_reparto, observaciones";
+    const campos = "id, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, detalle_productos, total, forma_pago, estado, dia_reparto, observaciones, lat, lng, orden_ruta";
 
     let query = supa.from("pedidos").select(campos).in("estado", ["listo_despacho", "en_ruta", "entregado"]);
     if (diaSeleccionado !== "__todos__") query = query.eq("dia_reparto", diaSeleccionado);
@@ -133,13 +148,20 @@
     }
 
     rutaCache = (data || []).slice().sort((a, b) => {
-      // Pendientes de entregar primero, entregados al final.
+      // Pendientes de entregar primero, entregados al final. Dentro de cada
+      // grupo, respeta el orden armado a mano con el mapa (orden_ruta) si
+      // existe, y si no, ordena por comuna/dirección.
       const pa = a.estado === "entregado" ? 1 : 0;
       const pb = b.estado === "entregado" ? 1 : 0;
       if (pa !== pb) return pa - pb;
-      const c = a.comuna.localeCompare(b.comuna, "es");
-      return c !== 0 ? c : a.direccion.localeCompare(b.direccion, "es");
+      return comparadorOrdenRutaMapa(a, b);
     });
+
+    // Se oculta el mapa de la ruta anterior (si estaba abierto) al recargar
+    // o cambiar de día, para no mostrar pines de otra ruta.
+    document.getElementById("mapaRutaRepartoWrap").style.display = "none";
+    planificadorRutaReparto = null;
+    document.getElementById("rutaMapaBtn").style.display = rutaCache.some(p => p.estado !== "entregado") ? "flex" : "none";
 
     renderRuta();
   }
@@ -223,6 +245,47 @@
     const p = rutaCache.find(x => x.id === pedidoId);
     if (p) p.estado = nuevoEstado;
     renderRuta();
+  }
+
+  // ==========================================================================
+  // MAPA DE LA RUTA (planificador con arrastrar y soltar)
+  // ==========================================================================
+  let planificadorRutaReparto = null;
+
+  function toggleMapaRutaReparto() {
+    const pendientes = rutaCache.filter(p => p.estado !== "entregado");
+    if (!pendientes.length) return;
+    const wrap = document.getElementById("mapaRutaRepartoWrap");
+    const abrir = wrap.style.display === "none";
+    wrap.style.display = abrir ? "block" : "none";
+    if (!abrir) return;
+
+    if (!planificadorRutaReparto) {
+      planificadorRutaReparto = iniciarPlanificadorRutaMapa({
+        pedidos: pendientes,
+        mapaContenedorId: "mapaRutaRepartoMapa",
+        listaContenedorId: "mapaRutaRepartoLista"
+      });
+      geocodificarConProgresoUIMapa(planificadorRutaReparto, "mapaRutaRepartoStatus");
+    }
+  }
+
+  async function guardarOrdenRutaReparto() {
+    if (!planificadorRutaReparto) return;
+    const status = document.getElementById("mapaRutaRepartoStatus");
+    status.className = "status-msg";
+    status.textContent = "Guardando orden...";
+
+    const errores = await planificadorRutaReparto.guardar();
+
+    if (errores > 0) {
+      status.classList.add("error");
+      status.textContent = `Se guardó, pero ${errores} parada(s) no se pudieron actualizar.`;
+    } else {
+      status.classList.add("ok");
+      status.textContent = "Orden guardado.";
+    }
+    cargarRuta();
   }
 
   function money(n) {
