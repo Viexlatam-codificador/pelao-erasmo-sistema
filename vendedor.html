@@ -49,6 +49,35 @@
   .producto-extra-quitar{ background:none; border:none; color:var(--rojo); font-size:1.1rem; cursor:pointer; padding:4px 8px; }
 
   .orders td, .orders th{ vertical-align:middle; }
+
+  /* Steppers de "tocar para sumar", igual que en la página de compra pública. */
+  .stepper-vendedor{ display:flex; align-items:center; gap:10px; margin:4px 0 2px; }
+  .stepper-vendedor button{
+    width:38px; height:38px; border-radius:50%; border:none; background:var(--verde); color:#fff;
+    font-size:1.2rem; cursor:pointer; flex-shrink:0; line-height:1;
+  }
+  .stepper-vendedor input{ width:64px; text-align:center; font-size:1rem; padding:8px 4px; margin:0; }
+  .stepper-mini{ display:flex; align-items:center; gap:4px; flex:1; }
+  .stepper-mini button{
+    width:26px; height:26px; border-radius:50%; border:none; background:var(--verde); color:#fff;
+    font-size:.9rem; cursor:pointer; flex-shrink:0; line-height:1;
+  }
+  .stepper-mini input{ width:40px; text-align:center; padding:6px 2px; margin:0; }
+
+  /* Pestañas desplegables (comunas por región, mis pedidos por estado). */
+  details.grupo-desplegable{ margin-bottom:10px; border:1px solid #e3e3da; border-radius:10px; overflow:hidden; }
+  details.grupo-desplegable summary{
+    cursor:pointer; list-style:none; padding:10px 14px; background:#f6f8f4;
+    font-weight:700; color:var(--verde-oscuro); font-size:.85rem;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  details.grupo-desplegable summary::-webkit-details-marker{ display:none; }
+  details.grupo-desplegable summary::after{ content:"▸"; transition:transform .15s; color:#888; }
+  details.grupo-desplegable[open] summary::after{ transform:rotate(90deg); }
+  details.grupo-desplegable summary .grupo-conteo{ font-weight:400; color:#888; font-size:.75rem; white-space:nowrap; }
+  details.grupo-desplegable .grupo-contenido{ padding:10px; }
+  details.grupo-desplegable table.orders{ margin:0; }
+  .icono-atencion-pedido{ color:var(--rojo); font-size:.85rem; margin-left:4px; }
 </style>
 </head>
 <body>
@@ -141,11 +170,19 @@
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
         <label>Cantidad Pipeño (bidones)</label>
-        <input type="number" id="cantidadPipeno" min="0" value="0">
+        <div class="stepper-vendedor">
+          <button type="button" onclick="stepQtyVendedor('cantidadPipeno',-1)">−</button>
+          <input type="number" id="cantidadPipeno" min="0" value="0">
+          <button type="button" onclick="stepQtyVendedor('cantidadPipeno',1)">+</button>
+        </div>
       </div>
       <div style="flex:1;">
         <label>Cantidad Granadina (displays)</label>
-        <input type="number" id="cantidadGranadina" min="0" value="0">
+        <div class="stepper-vendedor">
+          <button type="button" onclick="stepQtyVendedor('cantidadGranadina',-1)">−</button>
+          <input type="number" id="cantidadGranadina" min="0" value="0">
+          <button type="button" onclick="stepQtyVendedor('cantidadGranadina',1)">+</button>
+        </div>
       </div>
     </div>
     <p id="tierInfo" style="font-size:.85rem;color:#666;"></p>
@@ -203,6 +240,7 @@
       Comunas y días de reparto
     </h2>
     <p style="font-size:.85rem;color:#666;margin:0 0 10px;">Referencia para coordinar con el cliente antes de guardar el pedido.</p>
+    <input type="text" id="filtroComunaVendedor" placeholder="Buscar comuna..." style="margin-bottom:10px;" oninput="renderComunasFiltradas()">
     <div id="comunasWrap">
       <p class="empty-state">Cargando comunas...</p>
     </div>
@@ -388,11 +426,19 @@
   // ==========================================================================
   // COMUNAS Y SUGERENCIA DE DÍA/FECHA
   // ==========================================================================
+  const ORDEN_REGIONES_VENDEDOR = ["Región Metropolitana", "V Región"];
+  function ordenRegionVendedor(region) {
+    const i = ORDEN_REGIONES_VENDEDOR.indexOf(region);
+    return i === -1 ? ORDEN_REGIONES_VENDEDOR.length : i;
+  }
+
+  let comunasListaCache = [];
+
   async function cargarComunas() {
     const wrap = document.getElementById("comunasWrap");
     const { data, error } = await supa
       .from("comunas_rutas")
-      .select("comuna, dia_reparto, precio_despacho, activa")
+      .select("comuna, region, dia_reparto, precio_despacho, activa")
       .order("comuna", { ascending: true });
 
     if (error || !data) {
@@ -400,25 +446,50 @@
       return;
     }
 
+    comunasListaCache = data;
     comunasCache = {};
     data.forEach(c => { comunasCache[normalizeComuna(c.comuna)] = c; });
 
-    const filas = data.map(c => `
-      <tr>
-        <td>${c.comuna}</td>
-        <td>${c.activa === false ? '<span class="badge badge-anulado">No disponible</span>' : (DIA_LABEL[c.dia_reparto] || c.dia_reparto || "-")}</td>
-        <td>${c.precio_despacho != null ? money(c.precio_despacho) : "-"}</td>
-      </tr>
-    `).join("");
+    renderComunasFiltradas();
+  }
 
-    wrap.innerHTML = `
-      <table class="orders">
-        <thead>
-          <tr><th>Comuna</th><th>Día de reparto</th><th>Despacho</th></tr>
-        </thead>
-        <tbody>${filas}</tbody>
-      </table>
-    `;
+  // Comunas agrupadas por región en pestañas desplegables (en vez de una
+  // sola lista larga), con un buscador arriba para ir filtrando.
+  function renderComunasFiltradas() {
+    const wrap = document.getElementById("comunasWrap");
+    const texto = (document.getElementById("filtroComunaVendedor").value || "").trim().toLowerCase();
+
+    let lista = comunasListaCache;
+    if (texto) lista = lista.filter(c => c.comuna.toLowerCase().includes(texto));
+
+    if (!lista.length) {
+      wrap.innerHTML = `<p class="empty-state">No hay comunas que coincidan con la búsqueda.</p>`;
+      return;
+    }
+
+    const regiones = [...new Set(lista.map(c => c.region))].sort((a, b) => ordenRegionVendedor(a) - ordenRegionVendedor(b));
+
+    wrap.innerHTML = regiones.map(region => {
+      const comunasRegion = lista.filter(c => c.region === region);
+      const filas = comunasRegion.map(c => `
+        <tr>
+          <td>${c.comuna}</td>
+          <td>${c.activa === false ? '<span class="badge badge-anulado">No disponible</span>' : (DIA_LABEL[c.dia_reparto] || c.dia_reparto || "-")}</td>
+          <td>${c.precio_despacho != null ? money(c.precio_despacho) : "-"}</td>
+        </tr>
+      `).join("");
+      return `
+        <details class="grupo-desplegable" open>
+          <summary>${region} <span class="grupo-conteo">${comunasRegion.length} comuna${comunasRegion.length === 1 ? "" : "s"}</span></summary>
+          <div class="grupo-contenido">
+            <table class="orders">
+              <thead><tr><th>Comuna</th><th>Día de reparto</th><th>Despacho</th></tr></thead>
+              <tbody>${filas}</tbody>
+            </table>
+          </div>
+        </details>
+      `;
+    }).join("");
   }
 
   function proximaFechaParaDia(diaValor) {
@@ -460,6 +531,16 @@
     document.getElementById("fechaPedido").value = hoy.toISOString().slice(0, 10);
   }
 
+  // Botones "−/+" para ir sumando cantidades tocando, igual que en la
+  // página de compra pública — más simple que escribir el número a mano.
+  function stepQtyVendedor(id, delta) {
+    const el = document.getElementById(id);
+    let v = (parseInt(el.value || "0", 10)) + delta;
+    if (v < 0) v = 0;
+    el.value = v;
+    actualizarTotales();
+  }
+
   // ==========================================================================
   // PRODUCTOS EXTRA / PRECIOS ESPECIALES (nuevo pedido)
   // ==========================================================================
@@ -480,12 +561,26 @@
     actualizarTotales();
   }
 
+  function stepProductoExtra(id, delta) {
+    const p = productosExtraCache.find(p => p.id === id);
+    if (!p) return;
+    let v = (Number(p.cantidad) || 0) + delta;
+    if (v < 0) v = 0;
+    p.cantidad = v;
+    renderProductosExtra();
+    actualizarTotales();
+  }
+
   function renderProductosExtra() {
     const wrap = document.getElementById("productosExtraWrap");
     wrap.innerHTML = productosExtraCache.map(p => `
       <div class="producto-extra-row">
         <input type="text" placeholder="Nombre" value="${escAttr(p.nombre)}" style="flex:2;" oninput="actualizarProductoExtra(${p.id},'nombre',this.value)">
-        <input type="number" min="1" placeholder="Cant" value="${p.cantidad}" style="flex:1;" oninput="actualizarProductoExtra(${p.id},'cantidad',this.value)">
+        <div class="stepper-mini">
+          <button type="button" onclick="stepProductoExtra(${p.id},-1)">−</button>
+          <input type="number" min="1" placeholder="Cant" value="${p.cantidad}" oninput="actualizarProductoExtra(${p.id},'cantidad',this.value)">
+          <button type="button" onclick="stepProductoExtra(${p.id},1)">+</button>
+        </div>
         <input type="number" min="0" placeholder="Precio c/u" value="${p.precio}" style="flex:1;" oninput="actualizarProductoExtra(${p.id},'precio',this.value)">
         <button type="button" class="producto-extra-quitar" onclick="quitarProductoExtra(${p.id})">✕</button>
       </div>
@@ -716,6 +811,11 @@
     return p.estado === "pendiente" || p.estado === "preparacion" || p.estado === "rechazado";
   }
 
+  // Orden en que aparecen las pestañas — primero lo que necesita más
+  // atención (pendiente, preparación, rechazado), lo demás después.
+  const ORDEN_ESTADOS_VENDEDOR = ["pendiente", "preparacion", "rechazado", "listo_despacho", "en_ruta", "entregado", "anulado"];
+  const ESTADOS_ABIERTOS_VENDEDOR = ["pendiente", "preparacion", "rechazado"];
+
   async function cargarMisPedidos() {
     const wrap = document.getElementById("misPedidosWrap");
     const campos = "id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, dia_reparto, cantidad_pipeno, cantidad_granadina, precio_unitario_pipeno, detalle_productos, forma_pago, observaciones, hora_entrega, envio_gratis, motivo_rechazo, necesita_atencion_vendedor, total, estado, creado_en";
@@ -738,16 +838,15 @@
       return;
     }
 
-    const filas = misPedidosCache.map(p => {
+    const filaHtml = (p) => {
       const telWsp = normalizarTelefonoWspVendedor(p.telefono);
       return `
         <tr data-mis-pedido-id="${p.id}">
           <td>${p.fecha}</td>
-          <td>${p.nombre_cliente}</td>
+          <td>${p.nombre_cliente}${p.necesita_atencion_vendedor ? '<span class="icono-atencion-pedido" title="Necesita tu atención">⚠️</span>' : ""}</td>
           <td>${p.comuna}</td>
           <td>${p.dia_reparto === "sin_asignar" ? "Sin ruta" : (p.dia_reparto || "-")}</td>
           <td>${money(p.total)}</td>
-          <td><span class="badge badge-${p.estado}">${ESTADO_LABEL[p.estado] || p.estado}</span></td>
           <td>
             <div class="stop-actions" style="justify-content:flex-start;flex-wrap:nowrap;">
               <a class="stop-btn-llamar" href="tel:${p.telefono}" title="Llamar">📞</a>
@@ -757,16 +856,32 @@
           </td>
         </tr>
       `;
-    }).join("");
+    };
 
-    wrap.innerHTML = `
-      <table class="orders">
-        <thead>
-          <tr><th>Fecha</th><th>Cliente</th><th>Comuna</th><th>Día ruta</th><th>Total</th><th>Estado</th><th>Acciones</th></tr>
-        </thead>
-        <tbody>${filas}</tbody>
-      </table>
-    `;
+    // Se agrupan en pestañas por estado, en vez de una sola lista larga —
+    // así se ve de un vistazo qué necesita atención y qué ya quedó cerrado.
+    const estadosPresentes = ORDEN_ESTADOS_VENDEDOR.filter(e => misPedidosCache.some(p => p.estado === e));
+
+    wrap.innerHTML = estadosPresentes.map(estado => {
+      const pedidosEstado = misPedidosCache.filter(p => p.estado === estado);
+      const abierto = ESTADOS_ABIERTOS_VENDEDOR.includes(estado) ? "open" : "";
+      return `
+        <details class="grupo-desplegable" ${abierto}>
+          <summary>
+            <span class="badge badge-${estado}">${ESTADO_LABEL[estado] || estado}</span>
+            <span class="grupo-conteo">${pedidosEstado.length} pedido${pedidosEstado.length === 1 ? "" : "s"}</span>
+          </summary>
+          <div class="grupo-contenido">
+            <table class="orders">
+              <thead>
+                <tr><th>Fecha</th><th>Cliente</th><th>Comuna</th><th>Día ruta</th><th>Total</th><th>Acciones</th></tr>
+              </thead>
+              <tbody>${pedidosEstado.map(filaHtml).join("")}</tbody>
+            </table>
+          </div>
+        </details>
+      `;
+    }).join("");
   }
 
   function toggleWhatsAppPlantillas(id) {
@@ -785,7 +900,7 @@
     const tr = document.createElement("tr");
     tr.id = `plantillasFila_${id}`;
     tr.innerHTML = `
-      <td colspan="7">
+      <td colspan="6">
         <div class="accion-inline-caja">
           <label>Elige un mensaje para enviarle por WhatsApp:</label>
           <div style="display:flex;flex-direction:column;gap:6px;">
@@ -845,7 +960,7 @@
     const tr = document.createElement("tr");
     tr.id = `edicionFila_${p.id}`;
     tr.innerHTML = `
-      <td colspan="7">
+      <td colspan="6">
         <div class="accion-inline-caja">
           <p style="margin:0;font-size:.82rem;color:#c62828;">❌ Este pedido fue rechazado por el repartidor${p.motivo_rechazo ? ": " + escAttr(p.motivo_rechazo) : "."}</p>
           <label>Nueva fecha de entrega para reactivarlo</label>
@@ -897,7 +1012,7 @@
     const tr = document.createElement("tr");
     tr.id = `edicionFila_${p.id}`;
     tr.innerHTML = `
-      <td colspan="7">
+      <td colspan="6">
         <div class="accion-inline-caja">
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <div style="flex:1;min-width:140px;"><label>Cliente</label><input type="text" id="ed_nombre_${p.id}" value="${escAttr(p.nombre_cliente)}"></div>
