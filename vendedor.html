@@ -738,7 +738,8 @@
   // ==========================================================================
   // COTIZACIÓN VISUAL (imagen / PDF con logo, para verse profesional)
   // ==========================================================================
-  function construirHtmlCotizacionVisual() {
+  // Junta los datos de la cotización desde el formulario de "Nuevo pedido".
+  function datosCotizacionDesdeNuevoPedido() {
     const nombreCliente = document.getElementById("nombreCliente").value.trim() || "Cliente";
     const comuna = document.getElementById("comuna").value.trim();
     const direccion = document.getElementById("direccion").value.trim();
@@ -761,6 +762,69 @@
       filas.push({ nombre: p.nombre, cantidad: Number(p.cantidad) || 0, precio: Number(p.precio) || 0, subtotal: (Number(p.cantidad) || 0) * (Number(p.precio) || 0) });
     });
 
+    return {
+      nombreCliente,
+      direccionTexto: comuna ? `${direccion} ${numero}, ${comuna}` : "",
+      fechaTexto: fechaPedido ? new Date(fechaPedido + "T12:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "",
+      hora,
+      envioGratis,
+      filas,
+      despacho: resultado.despacho,
+      total: resultado.total
+    };
+  }
+
+  // Junta los datos de la cotización desde el formulario de EDICIÓN de un
+  // pedido ya existente (misma lógica de precios que guardarEdicionPedidoVendedor,
+  // pero solo para mostrar — no guarda nada).
+  function datosCotizacionDesdeEdicion(id) {
+    const p = misPedidosCache.find(x => x.id === id);
+    if (!p) return null;
+
+    const nombreCliente = document.getElementById(`ed_nombre_${id}`).value.trim() || p.nombre_cliente || "Cliente";
+    const comuna = document.getElementById(`ed_comuna_${id}`).value.trim();
+    const direccion = document.getElementById(`ed_direccion_${id}`).value.trim();
+    const numero = document.getElementById(`ed_numero_${id}`).value.trim();
+    const fecha = document.getElementById(`ed_fecha_${id}`).value;
+    const hora = document.getElementById(`ed_hora_${id}`).value.trim();
+    const cantidadPipeno = parseInt(document.getElementById(`ed_pipeno_${id}`).value || "0", 10);
+    const cantidadGranadina = parseInt(document.getElementById(`ed_granadina_${id}`).value || "0", 10);
+    const precioEspecialRaw = document.getElementById(`ed_precioespecial_${id}`).value;
+    const precioEspecial = precioEspecialRaw === "" ? NaN : parseInt(precioEspecialRaw, 10);
+    const precioEspecialGranadinaRaw = document.getElementById(`ed_precioespecialgranadina_${id}`).value;
+    const precioEspecialGranadina = precioEspecialGranadinaRaw === "" ? NaN : parseInt(precioEspecialGranadinaRaw, 10);
+    const envioGratis = document.getElementById(`ed_enviogratis_${id}`).checked;
+    const montoDespacho = envioGratis ? 0 : (parseInt(document.getElementById(`ed_despacho_${id}`).value || "0", 10));
+
+    const regionKey = regionKeyFromLabel(p.region);
+    const tier = tierFor(regionKey, cantidadPipeno);
+    const precioUnitarioPipeno = (!isNaN(precioEspecial) && precioEspecial >= 0) ? precioEspecial : (tier ? tier.price : 0);
+    const precioUnitarioGranadina = (!isNaN(precioEspecialGranadina) && precioEspecialGranadina >= 0) ? precioEspecialGranadina : GRANADINA_PRICE;
+
+    const filas = [];
+    if (cantidadPipeno > 0) filas.push({ nombre: "Pipeño 5L", cantidad: cantidadPipeno, precio: precioUnitarioPipeno, subtotal: cantidadPipeno * precioUnitarioPipeno });
+    if (cantidadGranadina > 0) filas.push({ nombre: "Granadina", cantidad: cantidadGranadina, precio: precioUnitarioGranadina, subtotal: cantidadGranadina * precioUnitarioGranadina });
+    (edicionProductosExtraCache[id] || []).filter(l => l.nombre && (Number(l.cantidad) || 0) > 0).forEach(l => {
+      filas.push({ nombre: l.nombre, cantidad: Number(l.cantidad) || 0, precio: Number(l.precio) || 0, subtotal: (Number(l.cantidad) || 0) * (Number(l.precio) || 0) });
+    });
+
+    const total = filas.reduce((s, f) => s + f.subtotal, 0) + montoDespacho;
+
+    return {
+      nombreCliente,
+      direccionTexto: comuna ? `${direccion} ${numero}, ${comuna}` : "",
+      fechaTexto: fecha ? new Date(fecha + "T12:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "",
+      hora,
+      envioGratis,
+      filas,
+      despacho: montoDespacho,
+      total
+    };
+  }
+
+  function construirHtmlCotizacionVisual(datos) {
+    const { nombreCliente, direccionTexto, fechaTexto, hora, envioGratis, filas, despacho, total } = datos;
+
     const filasHtml = filas.map(f => `
       <tr>
         <td style="padding:9px 4px;border-bottom:1px solid #eee;">${escAttr(f.nombre)}</td>
@@ -769,9 +833,6 @@
         <td style="padding:9px 4px;border-bottom:1px solid #eee;text-align:right;font-weight:700;">${money(f.subtotal)}</td>
       </tr>
     `).join("");
-
-    const direccionTexto = comuna ? `${direccion} ${numero}, ${comuna}` : "";
-    const fechaTexto = fechaPedido ? new Date(fechaPedido + "T12:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "";
 
     return `
       <div style="background:linear-gradient(160deg,#155724,#1e7d32);padding:26px 28px;display:flex;align-items:center;gap:16px;">
@@ -798,11 +859,11 @@
         </table>
         <div style="display:flex;justify-content:space-between;font-size:.85rem;color:#666;margin-top:10px;">
           <span>Despacho</span>
-          <span>${envioGratis ? "Gratis 🎁" : money(resultado.despacho)}</span>
+          <span>${envioGratis ? "Gratis 🎁" : money(despacho)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:2px dashed #ddd;">
           <span style="font-weight:800;color:#155724;font-size:1.05rem;">Total</span>
-          <span style="font-weight:800;font-size:1.5rem;color:#D52B1E;">${money(resultado.total)}</span>
+          <span style="font-weight:800;font-size:1.5rem;color:#D52B1E;">${money(total)}</span>
         </div>
         <div style="margin-top:22px;padding-top:16px;border-top:1px solid #eee;text-align:center;color:#888;font-size:.8rem;">
           ¡Gracias por tu compra! 🙌 · El Pelao Erasmo
@@ -824,17 +885,17 @@
     }));
   }
 
-  async function generarCanvasCotizacion() {
+  async function generarCanvasCotizacion(datos) {
     const contenedor = document.getElementById("cotizacionVisual");
-    contenedor.innerHTML = construirHtmlCotizacionVisual();
+    contenedor.innerHTML = construirHtmlCotizacionVisual(datos);
     await esperarImagenesCargadas(contenedor);
     return await html2canvas(contenedor, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
   }
 
-  function nombreArchivoCotizacion(extension) {
-    const nombreCliente = (document.getElementById("nombreCliente").value.trim() || "cliente")
+  function nombreArchivoCotizacion(extension, nombreCliente) {
+    const base = (nombreCliente || "cliente")
       .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-    return `cotizacion-${nombreCliente || "cliente"}-el-pelao-erasmo.${extension}`;
+    return `cotizacion-${base || "cliente"}-el-pelao-erasmo.${extension}`;
   }
 
   function descargarBlob(blob, nombreArchivo) {
@@ -848,14 +909,14 @@
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
 
-  async function descargarCotizacionJPG() {
-    const status = document.getElementById("cotizacionStatus");
+  async function generarYDescargarCotizacionJPG(datos, statusElId) {
+    const status = document.getElementById(statusElId);
     status.className = "status-msg";
     status.textContent = "Generando imagen...";
     try {
-      const canvas = await generarCanvasCotizacion();
+      const canvas = await generarCanvasCotizacion(datos);
       canvas.toBlob(blob => {
-        descargarBlob(blob, nombreArchivoCotizacion("jpg"));
+        descargarBlob(blob, nombreArchivoCotizacion("jpg", datos.nombreCliente));
         status.className = "status-msg ok";
         status.textContent = "Imagen descargada ✔️";
       }, "image/jpeg", 0.92);
@@ -865,18 +926,18 @@
     }
   }
 
-  async function descargarCotizacionPDF() {
-    const status = document.getElementById("cotizacionStatus");
+  async function generarYDescargarCotizacionPDF(datos, statusElId) {
+    const status = document.getElementById(statusElId);
     status.className = "status-msg";
     status.textContent = "Generando PDF...";
     try {
-      const canvas = await generarCanvasCotizacion();
+      const canvas = await generarCanvasCotizacion(datos);
       const { jsPDF } = window.jspdf;
       const anchoPdf = 210; // mm, carta ancho A4
       const altoPdf = (canvas.height * anchoPdf) / canvas.width;
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [anchoPdf, altoPdf] });
       doc.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, anchoPdf, altoPdf);
-      doc.save(nombreArchivoCotizacion("pdf"));
+      doc.save(nombreArchivoCotizacion("pdf", datos.nombreCliente));
       status.className = "status-msg ok";
       status.textContent = "PDF descargado ✔️";
     } catch (e) {
@@ -885,14 +946,14 @@
     }
   }
 
-  async function compartirCotizacionImagen() {
-    const status = document.getElementById("cotizacionStatus");
+  async function generarYCompartirCotizacionImagen(datos, statusElId) {
+    const status = document.getElementById(statusElId);
     status.className = "status-msg";
     status.textContent = "Preparando...";
     try {
-      const canvas = await generarCanvasCotizacion();
+      const canvas = await generarCanvasCotizacion(datos);
       canvas.toBlob(async (blob) => {
-        const archivo = new File([blob], nombreArchivoCotizacion("jpg"), { type: "image/jpeg" });
+        const archivo = new File([blob], nombreArchivoCotizacion("jpg", datos.nombreCliente), { type: "image/jpeg" });
         if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
           try {
             await navigator.share({ files: [archivo], title: "Cotización El Pelao Erasmo" });
@@ -903,7 +964,7 @@
             status.textContent = "";
           }
         } else {
-          descargarBlob(blob, nombreArchivoCotizacion("jpg"));
+          descargarBlob(blob, nombreArchivoCotizacion("jpg", datos.nombreCliente));
           status.className = "status-msg ok";
           status.textContent = "Este celular/navegador no permite compartir directo — se descargó la imagen, adjúntala tú en WhatsApp.";
         }
@@ -912,6 +973,32 @@
       status.className = "status-msg error";
       status.textContent = "No se pudo generar la imagen.";
     }
+  }
+
+  // Envoltorios para el formulario de "Nuevo pedido" (sin parámetros, como
+  // ya llamaban los botones existentes).
+  async function descargarCotizacionJPG() {
+    await generarYDescargarCotizacionJPG(datosCotizacionDesdeNuevoPedido(), "cotizacionStatus");
+  }
+  async function descargarCotizacionPDF() {
+    await generarYDescargarCotizacionPDF(datosCotizacionDesdeNuevoPedido(), "cotizacionStatus");
+  }
+  async function compartirCotizacionImagen() {
+    await generarYCompartirCotizacionImagen(datosCotizacionDesdeNuevoPedido(), "cotizacionStatus");
+  }
+
+  // Envoltorios para editar un pedido YA existente, en "Mis pedidos".
+  async function descargarCotizacionJPGEdicion(id) {
+    const datos = datosCotizacionDesdeEdicion(id);
+    if (datos) await generarYDescargarCotizacionJPG(datos, `ed_status_${id}`);
+  }
+  async function descargarCotizacionPDFEdicion(id) {
+    const datos = datosCotizacionDesdeEdicion(id);
+    if (datos) await generarYDescargarCotizacionPDF(datos, `ed_status_${id}`);
+  }
+  async function compartirCotizacionImagenEdicion(id) {
+    const datos = datosCotizacionDesdeEdicion(id);
+    if (datos) await generarYCompartirCotizacionImagen(datos, `ed_status_${id}`);
   }
 
   // ==========================================================================
@@ -1296,7 +1383,17 @@
           </div>
           <label>Observaciones</label>
           <textarea id="ed_obs_${p.id}">${escAttr(p.observaciones || "")}</textarea>
-          <div class="accion-inline-botones">
+
+          <label style="margin-top:14px;">Enviar cotización actualizada al cliente</label>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn btn-primary" style="flex:1;font-size:.8rem;padding:9px;" onclick="compartirCotizacionImagenEdicion('${p.id}')">📤 Compartir (imagen)</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button type="button" class="btn btn-secondary" style="flex:1;font-size:.78rem;padding:8px;" onclick="descargarCotizacionJPGEdicion('${p.id}')">🖼️ JPG</button>
+            <button type="button" class="btn btn-secondary" style="flex:1;font-size:.78rem;padding:8px;" onclick="descargarCotizacionPDFEdicion('${p.id}')">📄 PDF</button>
+          </div>
+
+          <div class="accion-inline-botones" style="margin-top:12px;">
             <button type="button" class="accion-inline-cancelar" onclick="abrirEdicionPedidoVendedor('${p.id}')">Cancelar</button>
             <button type="button" class="accion-inline-confirmar" onclick="guardarEdicionPedidoVendedor('${p.id}')">Guardar cambios</button>
           </div>
