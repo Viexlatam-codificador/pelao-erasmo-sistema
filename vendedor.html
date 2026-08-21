@@ -620,9 +620,8 @@
 
     const precioEspecialGranadinaRaw = document.getElementById("precioEspecialGranadina").value;
     const precioEspecialGranadina = precioEspecialGranadinaRaw === "" ? NaN : parseInt(precioEspecialGranadinaRaw, 10);
-    if (!isNaN(precioEspecialGranadina) && precioEspecialGranadina >= 0) {
-      resultado.subtotalGranadina = cantidadGranadina * precioEspecialGranadina;
-    }
+    resultado.precioUnitarioGranadina = (!isNaN(precioEspecialGranadina) && precioEspecialGranadina >= 0) ? precioEspecialGranadina : GRANADINA_PRICE;
+    resultado.subtotalGranadina = cantidadGranadina * resultado.precioUnitarioGranadina;
 
     const subtotalExtras = productosExtraCache.reduce((s, p) => s + (Number(p.cantidad) || 0) * (Number(p.precio) || 0), 0);
     const totalFinal = resultado.subtotalPipeno + resultado.subtotalGranadina + resultado.despacho + subtotalExtras;
@@ -772,6 +771,7 @@
       cantidad_pipeno: cantidadPipeno,
       precio_unitario_pipeno: resultado.precioUnitarioPipeno,
       cantidad_granadina: cantidadGranadina,
+      precio_unitario_granadina: resultado.precioUnitarioGranadina,
       detalle_productos: detalleProductos,
       observaciones: observaciones || null,
       forma_pago: formaPago,
@@ -824,7 +824,7 @@
 
   async function cargarMisPedidos() {
     const wrap = document.getElementById("misPedidosWrap");
-    const campos = "id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, dia_reparto, cantidad_pipeno, cantidad_granadina, precio_unitario_pipeno, detalle_productos, forma_pago, observaciones, hora_entrega, envio_gratis, motivo_rechazo, necesita_atencion_vendedor, total, estado, creado_en";
+    const campos = "id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, dia_reparto, cantidad_pipeno, cantidad_granadina, precio_unitario_pipeno, precio_unitario_granadina, detalle_productos, forma_pago, observaciones, hora_entrega, envio_gratis, motivo_rechazo, necesita_atencion_vendedor, total, estado, creado_en";
     const { data, error } = await supa
       .from("pedidos")
       .select(campos)
@@ -930,7 +930,7 @@
 
   function despachoActualDePedido(p) {
     const subtotalPipeno = (p.cantidad_pipeno || 0) * (p.precio_unitario_pipeno || 0);
-    const subtotalGranadina = (p.cantidad_granadina || 0) * GRANADINA_PRICE;
+    const subtotalGranadina = (p.cantidad_granadina || 0) * (p.precio_unitario_granadina || GRANADINA_PRICE);
     const subtotalExtras = (p.detalle_productos || []).reduce((s, l) => s + (l.subtotal || ((l.cantidad || 0) * (l.precio_unitario || 0))), 0);
     const resto = (p.total || 0) - subtotalPipeno - subtotalGranadina - subtotalExtras;
     return resto > 0 ? Math.round(resto) : 0;
@@ -1042,6 +1042,17 @@
       precio: l.precio_unitario != null ? l.precio_unitario : (l.precio || 0)
     }));
 
+    // El campo "precio especial" solo se precarga cuando el pedido de
+    // verdad tiene uno vigente (distinto del precio estándar) — así, si
+    // nunca hubo un precio especial, al editar otra cosa (por ej. el
+    // teléfono) el precio se sigue recalculando solo según la cantidad,
+    // igual que antes. Pero si el jefe autorizó uno, queda visible y no se
+    // borra por accidente al guardar otros cambios.
+    const tierActual = tierFor(regionKeyFromLabel(p.region), p.cantidad_pipeno);
+    const precioEstandarPipeno = tierActual ? tierActual.price : 0;
+    const precioEspecialPipenoPrefill = (p.precio_unitario_pipeno && p.precio_unitario_pipeno !== precioEstandarPipeno) ? p.precio_unitario_pipeno : "";
+    const precioEspecialGranadinaPrefill = (p.precio_unitario_granadina && p.precio_unitario_granadina !== GRANADINA_PRICE) ? p.precio_unitario_granadina : "";
+
     const tr = document.createElement("tr");
     tr.id = `edicionFila_${p.id}`;
     tr.innerHTML = `
@@ -1063,9 +1074,13 @@
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <div style="flex:1;min-width:120px;"><label>Bidones Pipeño</label><input type="number" min="0" id="ed_pipeno_${p.id}" value="${p.cantidad_pipeno}"></div>
-            <div style="flex:1;min-width:120px;"><label>Precio especial c/u (opcional)</label><input type="number" min="0" id="ed_precioespecial_${p.id}" placeholder="Usar precio normal"></div>
-            <div style="flex:1;min-width:120px;"><label>Displays Granadina</label><input type="number" min="0" id="ed_granadina_${p.id}" value="${p.cantidad_granadina}"></div>
+            <div style="flex:1;min-width:120px;"><label>Precio especial Pipeño c/u (opcional)</label><input type="number" min="0" id="ed_precioespecial_${p.id}" value="${precioEspecialPipenoPrefill}" placeholder="Usar precio normal"></div>
           </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:120px;"><label>Displays Granadina</label><input type="number" min="0" id="ed_granadina_${p.id}" value="${p.cantidad_granadina}"></div>
+            <div style="flex:1;min-width:120px;"><label>Precio especial Granadina c/u (opcional)</label><input type="number" min="0" id="ed_precioespecialgranadina_${p.id}" value="${precioEspecialGranadinaPrefill}" placeholder="Usar precio normal"></div>
+          </div>
+          <p style="font-size:.72rem;color:#886;margin:2px 0 0;">💲 Usa estos campos solo si el jefe autorizó un precio distinto al normal para este pedido.</p>
           <label>Otros productos / precios especiales de este pedido</label>
           <div id="ed_productosExtraWrap_${p.id}"></div>
           <button type="button" class="btn btn-secondary" style="padding:8px 12px;font-size:.8rem;margin-top:4px;" onclick="agregarProductoExtraEdicion('${p.id}')">+ Agregar producto</button>
@@ -1163,6 +1178,8 @@
     const cantidadGranadina = parseInt(document.getElementById(`ed_granadina_${id}`).value || "0", 10);
     const precioEspecialRaw = document.getElementById(`ed_precioespecial_${id}`).value;
     const precioEspecial = precioEspecialRaw === "" ? NaN : parseInt(precioEspecialRaw, 10);
+    const precioEspecialGranadinaRaw = document.getElementById(`ed_precioespecialgranadina_${id}`).value;
+    const precioEspecialGranadina = precioEspecialGranadinaRaw === "" ? NaN : parseInt(precioEspecialGranadinaRaw, 10);
     const envioGratis = document.getElementById(`ed_enviogratis_${id}`).checked;
     const montoDespacho = envioGratis ? 0 : (parseInt(document.getElementById(`ed_despacho_${id}`).value || "0", 10));
     const formaPago = document.getElementById(`ed_formapago_${id}`).value;
@@ -1186,8 +1203,9 @@
     const regionKey = regionKeyFromLabel(p.region);
     const tier = tierFor(regionKey, cantidadPipeno);
     const precioUnitarioPipeno = (!isNaN(precioEspecial) && precioEspecial >= 0) ? precioEspecial : (tier ? tier.price : 0);
+    const precioUnitarioGranadina = (!isNaN(precioEspecialGranadina) && precioEspecialGranadina >= 0) ? precioEspecialGranadina : GRANADINA_PRICE;
     const subtotalPipeno = cantidadPipeno * precioUnitarioPipeno;
-    const subtotalGranadina = cantidadGranadina * GRANADINA_PRICE;
+    const subtotalGranadina = cantidadGranadina * precioUnitarioGranadina;
     const subtotalExtras = lineasExtra.reduce((s, l) => s + l.subtotal, 0);
     const total = subtotalPipeno + subtotalGranadina + subtotalExtras + montoDespacho;
 
@@ -1199,6 +1217,7 @@
       cantidad_pipeno: cantidadPipeno,
       precio_unitario_pipeno: precioUnitarioPipeno,
       cantidad_granadina: cantidadGranadina,
+      precio_unitario_granadina: precioUnitarioGranadina,
       detalle_productos: lineasExtra,
       envio_gratis: envioGratis,
       forma_pago: formaPago,
