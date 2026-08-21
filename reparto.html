@@ -22,6 +22,13 @@
   .stop-btn-rechazar{ background:#fdecea; color:#c62828; border-color:#f5c6c2; }
   .stop-btn-reagendar{ background:#fff3e0; color:#e65100; border-color:#ffd9a8; }
   .badge-rechazado{ background:#fdecea; color:#c62828; }
+
+  /* Botón "avisar tiempo de llegada" — mismo estilo que rechazar/reagendar. */
+  .stop-btn-eta{
+    display:inline-flex; align-items:center; gap:5px; padding:9px 12px; border-radius:8px;
+    font-size:.78rem; font-weight:700; border:1px solid transparent; cursor:pointer; text-decoration:none;
+    background:#e3f2fd; color:#1565c0; border-color:#bbdefb;
+  }
   .accion-inline{ margin-top:10px; }
   .accion-inline-caja{
     background:#f7f7f2; border:1px solid #e3e3da; border-radius:8px; padding:10px; margin-top:4px;
@@ -309,6 +316,7 @@
     } else if (p.estado === "en_ruta") {
       botonesEstado = `<button class="stop-btn-entregado" onclick="cambiarEstado('${p.id}','entregado')">✅ Entregado</button>`;
       botonesAtencion = `
+        <button class="stop-btn-eta" onclick="toggleEtaPedido('${p.id}')">⏱️ Avisar llegada</button>
         <button class="stop-btn-reagendar" onclick="toggleAccionPedido('${p.id}','reagendar')">📅 Reagendar</button>
         <button class="stop-btn-rechazar" onclick="toggleAccionPedido('${p.id}','rechazar')">❌ Rechazado</button>
       `;
@@ -478,6 +486,140 @@
         await cargarRuta();
       });
     }
+  }
+
+  // ==========================================================================
+  // AVISAR TIEMPO DE LLEGADA — al cliente le llega solo un "llegamos en tantos
+  // minutos", nunca la ubicación real del repartidor (por seguridad). El
+  // cálculo usa la ubicación GPS actual del repartidor, la distancia hasta el
+  // cliente (con un factor para aproximar calles reales, no línea recta), un
+  // ajuste manual por tráfico/tacos, y un tiempo extra por cada parada
+  // pendiente que va antes en la ruta (porque hay que descargar en cada una).
+  // ==========================================================================
+  const ETA_VELOCIDAD_NORMAL_KMH = 28;
+  const ETA_VELOCIDAD_CON_TACOS_KMH = 16;
+  const ETA_FACTOR_CALLE_VS_LINEA_RECTA = 1.35;
+  const ETA_MINUTOS_DESCARGA_POR_PARADA = 5;
+
+  async function toggleEtaPedido(pedidoId) {
+    const contenedor = document.getElementById(`accionInline_${pedidoId}`);
+    if (!contenedor) return;
+
+    if (accionAbiertaId === pedidoId && accionAbiertaTipo === "eta") {
+      contenedor.innerHTML = "";
+      accionAbiertaId = null;
+      accionAbiertaTipo = null;
+      return;
+    }
+
+    if (accionAbiertaId && accionAbiertaId !== pedidoId) {
+      const otro = document.getElementById(`accionInline_${accionAbiertaId}`);
+      if (otro) otro.innerHTML = "";
+    }
+
+    accionAbiertaId = pedidoId;
+    accionAbiertaTipo = "eta";
+
+    contenedor.innerHTML = `
+      <div class="accion-inline-caja">
+        <label>Avisar tiempo de llegada al cliente</label>
+        <p class="status-msg" id="etaStatus_${pedidoId}">Calculando tiempo estimado...</p>
+        <div id="etaResultado_${pedidoId}"></div>
+      </div>
+    `;
+
+    await calcularYMostrarEta(pedidoId, false);
+  }
+
+  async function calcularYMostrarEta(pedidoId, hayTacos) {
+    const p = rutaCache.find(x => x.id === pedidoId);
+    const status = document.getElementById(`etaStatus_${pedidoId}`);
+    const resultadoDiv = document.getElementById(`etaResultado_${pedidoId}`);
+    if (!p || !status || !resultadoDiv) return;
+
+    if (!navigator.geolocation) {
+      status.classList.remove("ok");
+      status.textContent = "Este dispositivo no permite ubicarte para calcular el tiempo.";
+      return;
+    }
+
+    status.classList.remove("ok");
+    status.textContent = "Calculando tiempo estimado...";
+
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      // Si el pedido no tiene coordenadas guardadas todavía, se geocodifica
+      // su dirección al vuelo (solo para este cálculo, sin cambiar la vista).
+      let clienteLat = p.lat, clienteLng = p.lng;
+      if (!clienteLat || !clienteLng) {
+        const direccionCompleta = `${p.direccion} ${p.numero}, ${p.comuna}, Chile`;
+        const coords = await geocodificarDireccionTextoMapa(direccionCompleta);
+        if (coords) {
+          clienteLat = coords.lat;
+          clienteLng = coords.lng;
+          p.lat = coords.lat;
+          p.lng = coords.lng;
+        }
+      }
+
+      if (!clienteLat || !clienteLng) {
+        status.textContent = "No se pudo ubicar la dirección del cliente para calcular el tiempo.";
+        return;
+      }
+
+      const puntoRepartidor = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      const puntoCliente = L.latLng(clienteLat, clienteLng);
+      const distanciaKm = (puntoRepartidor.distanceTo(puntoCliente) / 1000) * ETA_FACTOR_CALLE_VS_LINEA_RECTA;
+
+      const velocidad = hayTacos ? ETA_VELOCIDAD_CON_TACOS_KMH : ETA_VELOCIDAD_NORMAL_KMH;
+      const minutosViaje = (distanciaKm / velocidad) * 60;
+
+      // Paradas todavía pendientes que van antes que esta en la ruta actual
+      // (el repartidor tiene que descargar en cada una antes de llegar aquí).
+      const enCurso = rutaCache.filter(x => x.estado === "listo_despacho" || x.estado === "en_ruta");
+      const posicion = enCurso.findIndex(x => x.id === pedidoId);
+      const paradasPrevias = posicion > 0 ? posicion : 0;
+      const minutosDescarga = paradasPrevias * ETA_MINUTOS_DESCARGA_POR_PARADA;
+
+      const totalMin = Math.ceil(minutosViaje + minutosDescarga);
+      const minEstimado = Math.max(5, Math.round(totalMin / 5) * 5);
+      const maxEstimado = minEstimado + 10;
+      const textoTiempo = formatearRangoTiempoEta(minEstimado, maxEstimado);
+
+      status.classList.add("ok");
+      status.textContent = "Tiempo estimado calculado.";
+
+      const primerNombre = (p.nombre_cliente || "").split(" ")[0];
+      const mensaje = `Hola ${primerNombre}, te escribimos de El Pelao Erasmo 🚚 Tu pedido va en camino, estimamos llegar en ${textoTiempo}. ¡Gracias por tu paciencia!`;
+      const telWsp = normalizarTelefonoWsp(p.telefono);
+
+      resultadoDiv.innerHTML = `
+        <p style="font-size:.85rem;color:#555;margin:6px 0;">Estimado: <b>${textoTiempo}</b>${paradasPrevias ? ` (incluye ${paradasPrevias} parada${paradasPrevias > 1 ? "s" : ""} antes)` : ""}</p>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:.85rem;">
+          <input type="checkbox" id="etaTacos_${pedidoId}" ${hayTacos ? "checked" : ""} onchange="calcularYMostrarEta('${pedidoId}', this.checked)">
+          🚦 Hay tacos / tráfico en el trayecto
+        </label>
+        <p style="font-size:.78rem;color:#999;margin:4px 0 10px;">El mensaje solo indica el tiempo estimado — nunca la ubicación del repartidor.</p>
+        <div class="accion-inline-botones">
+          <button class="accion-inline-cancelar" onclick="toggleEtaPedido('${pedidoId}')">Cancelar</button>
+          ${telWsp
+            ? `<a class="accion-inline-confirmar" style="text-decoration:none;text-align:center;display:flex;align-items:center;justify-content:center;" href="https://wa.me/${telWsp}?text=${encodeURIComponent(mensaje)}" target="_blank" rel="noopener" onclick="toggleEtaPedido('${pedidoId}')">Enviar por WhatsApp</a>`
+            : `<span style="font-size:.8rem;color:#c00;flex:1;text-align:center;">Sin teléfono válido para WhatsApp</span>`
+          }
+        </div>
+      `;
+    }, () => {
+      status.textContent = "No se pudo obtener tu ubicación (revisa el permiso de ubicación del navegador).";
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+  }
+
+  function formatearRangoTiempoEta(minMin, maxMin) {
+    if (maxMin < 60) return `${minMin}-${maxMin} minutos`;
+    const formatear = (min) => {
+      const h = Math.floor(min / 60);
+      const m = min % 60;
+      return m === 0 ? `${h} h` : `${h} h ${m} min`;
+    };
+    return `${formatear(minMin)} y ${formatear(maxMin)}`;
   }
 
   async function cambiarEstado(pedidoId, nuevoEstado) {
