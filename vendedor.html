@@ -226,14 +226,31 @@
 
     <button type="button" class="btn btn-secondary btn-block" style="margin-top:10px;" onclick="mostrarCotizacion()">📋 Ver cotización para enviar al cliente</button>
     <div id="cotizacionWrap" style="display:none;margin-top:10px;">
-      <textarea id="cotizacionTexto" rows="10" style="font-family:monospace;font-size:.78rem;"></textarea>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="btn btn-primary" style="flex:1;" onclick="compartirCotizacionImagen()">📤 Compartir cotización (imagen)</button>
+      </div>
       <div style="display:flex;gap:8px;margin-top:8px;">
-        <button type="button" class="btn btn-secondary" style="flex:1;" onclick="copiarCotizacion()">📋 Copiar</button>
-        <button type="button" class="btn btn-primary" style="flex:1;" onclick="enviarCotizacionWhatsApp()">💬 Enviar WhatsApp</button>
+        <button type="button" class="btn btn-secondary" style="flex:1;" onclick="descargarCotizacionJPG()">🖼️ Descargar JPG</button>
+        <button type="button" class="btn btn-secondary" style="flex:1;" onclick="descargarCotizacionPDF()">📄 Descargar PDF</button>
       </div>
       <p class="status-msg" id="cotizacionStatus"></p>
+      <details style="margin-top:10px;">
+        <summary style="cursor:pointer;font-weight:700;color:#888;font-size:.78rem;">Ver como texto (para copiar o editar a mano)</summary>
+        <div style="margin-top:8px;">
+          <textarea id="cotizacionTexto" rows="10" style="font-family:monospace;font-size:.78rem;"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button type="button" class="btn btn-secondary" style="flex:1;" onclick="copiarCotizacion()">📋 Copiar texto</button>
+            <button type="button" class="btn btn-secondary" style="flex:1;" onclick="enviarCotizacionWhatsApp()">💬 Enviar como texto</button>
+          </div>
+        </div>
+      </details>
     </div>
   </section>
+
+  <!-- Plantilla visual de la cotización (fuera de pantalla): se arma acá y se
+       convierte en imagen/PDF con html2canvas — así el cliente recibe algo
+       con el logo y los colores de la marca, no solo texto plano. -->
+  <div id="cotizacionVisual" style="position:fixed;left:-9999px;top:0;width:600px;background:#fff;font-family:'Segoe UI',Arial,sans-serif;"></div>
 
   <section class="card">
     <h2 class="card-title">
@@ -291,6 +308,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="assets/supabase-client.js"></script>
 <script src="assets/pricing.js"></script>
 <script src="assets/auth-guard.js"></script>
@@ -715,6 +733,185 @@
       ? `https://wa.me/${telWsp}?text=${encodeURIComponent(texto)}`
       : `https://wa.me/?text=${encodeURIComponent(texto)}`;
     window.open(url, "_blank");
+  }
+
+  // ==========================================================================
+  // COTIZACIÓN VISUAL (imagen / PDF con logo, para verse profesional)
+  // ==========================================================================
+  function construirHtmlCotizacionVisual() {
+    const nombreCliente = document.getElementById("nombreCliente").value.trim() || "Cliente";
+    const comuna = document.getElementById("comuna").value.trim();
+    const direccion = document.getElementById("direccion").value.trim();
+    const numero = document.getElementById("numero").value.trim();
+    const cantidadPipeno = parseInt(document.getElementById("cantidadPipeno").value || "0", 10);
+    const cantidadGranadina = parseInt(document.getElementById("cantidadGranadina").value || "0", 10);
+    const fechaPedido = document.getElementById("fechaPedido").value;
+    const hora = document.getElementById("horaEntrega").value.trim();
+    const envioGratis = document.getElementById("envioGratis").checked;
+    const resultado = actualizarTotales();
+
+    const filas = [];
+    if (cantidadPipeno > 0) {
+      filas.push({ nombre: "Pipeño 5L", cantidad: cantidadPipeno, precio: resultado.precioUnitarioPipeno, subtotal: resultado.subtotalPipeno });
+    }
+    if (cantidadGranadina > 0) {
+      filas.push({ nombre: "Granadina", cantidad: cantidadGranadina, precio: resultado.precioUnitarioGranadina, subtotal: resultado.subtotalGranadina });
+    }
+    productosExtraCache.filter(p => p.nombre && (Number(p.cantidad) || 0) > 0).forEach(p => {
+      filas.push({ nombre: p.nombre, cantidad: Number(p.cantidad) || 0, precio: Number(p.precio) || 0, subtotal: (Number(p.cantidad) || 0) * (Number(p.precio) || 0) });
+    });
+
+    const filasHtml = filas.map(f => `
+      <tr>
+        <td style="padding:9px 4px;border-bottom:1px solid #eee;">${escAttr(f.nombre)}</td>
+        <td style="padding:9px 4px;border-bottom:1px solid #eee;text-align:center;">${f.cantidad}</td>
+        <td style="padding:9px 4px;border-bottom:1px solid #eee;text-align:right;">${money(f.precio)}</td>
+        <td style="padding:9px 4px;border-bottom:1px solid #eee;text-align:right;font-weight:700;">${money(f.subtotal)}</td>
+      </tr>
+    `).join("");
+
+    const direccionTexto = comuna ? `${direccion} ${numero}, ${comuna}` : "";
+    const fechaTexto = fechaPedido ? new Date(fechaPedido + "T12:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }) : "";
+
+    return `
+      <div style="background:linear-gradient(160deg,#155724,#1e7d32);padding:26px 28px;display:flex;align-items:center;gap:16px;">
+        <img src="assets/logo.jpeg" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid #fff;flex-shrink:0;">
+        <div>
+          <div style="color:#fff;font-size:1.35rem;font-weight:800;line-height:1.2;">El Pelao Erasmo</div>
+          <div style="color:#d9f3e0;font-size:.85rem;margin-top:2px;">Cotización de pedido</div>
+        </div>
+      </div>
+      <div style="padding:28px;">
+        <p style="margin:0 0 4px;font-size:1rem;color:#222;">Hola <strong>${escAttr(nombreCliente.split(" ")[0])}</strong>, te dejamos el detalle de tu pedido:</p>
+        ${direccionTexto ? `<p style="margin:2px 0;font-size:.85rem;color:#666;">📍 ${escAttr(direccionTexto)}</p>` : ""}
+        ${fechaTexto ? `<p style="margin:2px 0 16px;font-size:.85rem;color:#666;">📅 ${escAttr(fechaTexto)}${hora ? " · " + escAttr(hora) : ""}</p>` : `<div style="margin-bottom:12px;"></div>`}
+        <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin-top:10px;">
+          <thead>
+            <tr style="color:#888;font-size:.72rem;text-transform:uppercase;letter-spacing:.3px;">
+              <th style="text-align:left;padding-bottom:6px;border-bottom:2px solid #155724;">Producto</th>
+              <th style="text-align:center;padding-bottom:6px;border-bottom:2px solid #155724;">Cant.</th>
+              <th style="text-align:right;padding-bottom:6px;border-bottom:2px solid #155724;">Precio</th>
+              <th style="text-align:right;padding-bottom:6px;border-bottom:2px solid #155724;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>${filasHtml || `<tr><td colspan="4" style="padding:10px 4px;color:#999;">Sin productos todavía</td></tr>`}</tbody>
+        </table>
+        <div style="display:flex;justify-content:space-between;font-size:.85rem;color:#666;margin-top:10px;">
+          <span>Despacho</span>
+          <span>${envioGratis ? "Gratis 🎁" : money(resultado.despacho)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:2px dashed #ddd;">
+          <span style="font-weight:800;color:#155724;font-size:1.05rem;">Total</span>
+          <span style="font-weight:800;font-size:1.5rem;color:#D52B1E;">${money(resultado.total)}</span>
+        </div>
+        <div style="margin-top:22px;padding-top:16px;border-top:1px solid #eee;text-align:center;color:#888;font-size:.8rem;">
+          ¡Gracias por tu compra! 🙌 · El Pelao Erasmo
+        </div>
+      </div>
+    `;
+  }
+
+  // Espera a que el logo (y cualquier otra imagen) esté cargado antes de
+  // rasterizar — si no, html2canvas puede capturar el cuadro vacío.
+  function esperarImagenesCargadas(contenedor) {
+    const imgs = Array.from(contenedor.querySelectorAll("img"));
+    return Promise.all(imgs.map(img => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(resolve => {
+        img.addEventListener("load", resolve, { once: true });
+        img.addEventListener("error", resolve, { once: true });
+      });
+    }));
+  }
+
+  async function generarCanvasCotizacion() {
+    const contenedor = document.getElementById("cotizacionVisual");
+    contenedor.innerHTML = construirHtmlCotizacionVisual();
+    await esperarImagenesCargadas(contenedor);
+    return await html2canvas(contenedor, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+  }
+
+  function nombreArchivoCotizacion(extension) {
+    const nombreCliente = (document.getElementById("nombreCliente").value.trim() || "cliente")
+      .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    return `cotizacion-${nombreCliente || "cliente"}-el-pelao-erasmo.${extension}`;
+  }
+
+  function descargarBlob(blob, nombreArchivo) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  async function descargarCotizacionJPG() {
+    const status = document.getElementById("cotizacionStatus");
+    status.className = "status-msg";
+    status.textContent = "Generando imagen...";
+    try {
+      const canvas = await generarCanvasCotizacion();
+      canvas.toBlob(blob => {
+        descargarBlob(blob, nombreArchivoCotizacion("jpg"));
+        status.className = "status-msg ok";
+        status.textContent = "Imagen descargada ✔️";
+      }, "image/jpeg", 0.92);
+    } catch (e) {
+      status.className = "status-msg error";
+      status.textContent = "No se pudo generar la imagen.";
+    }
+  }
+
+  async function descargarCotizacionPDF() {
+    const status = document.getElementById("cotizacionStatus");
+    status.className = "status-msg";
+    status.textContent = "Generando PDF...";
+    try {
+      const canvas = await generarCanvasCotizacion();
+      const { jsPDF } = window.jspdf;
+      const anchoPdf = 210; // mm, carta ancho A4
+      const altoPdf = (canvas.height * anchoPdf) / canvas.width;
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [anchoPdf, altoPdf] });
+      doc.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, anchoPdf, altoPdf);
+      doc.save(nombreArchivoCotizacion("pdf"));
+      status.className = "status-msg ok";
+      status.textContent = "PDF descargado ✔️";
+    } catch (e) {
+      status.className = "status-msg error";
+      status.textContent = "No se pudo generar el PDF.";
+    }
+  }
+
+  async function compartirCotizacionImagen() {
+    const status = document.getElementById("cotizacionStatus");
+    status.className = "status-msg";
+    status.textContent = "Preparando...";
+    try {
+      const canvas = await generarCanvasCotizacion();
+      canvas.toBlob(async (blob) => {
+        const archivo = new File([blob], nombreArchivoCotizacion("jpg"), { type: "image/jpeg" });
+        if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+          try {
+            await navigator.share({ files: [archivo], title: "Cotización El Pelao Erasmo" });
+            status.className = "status-msg ok";
+            status.textContent = "Listo, elige WhatsApp en el menú para enviarla.";
+          } catch (e) {
+            // el vendedor canceló el share — no es un error real
+            status.textContent = "";
+          }
+        } else {
+          descargarBlob(blob, nombreArchivoCotizacion("jpg"));
+          status.className = "status-msg ok";
+          status.textContent = "Este celular/navegador no permite compartir directo — se descargó la imagen, adjúntala tú en WhatsApp.";
+        }
+      }, "image/jpeg", 0.92);
+    } catch (e) {
+      status.className = "status-msg error";
+      status.textContent = "No se pudo generar la imagen.";
+    }
   }
 
   // ==========================================================================
