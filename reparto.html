@@ -138,6 +138,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/deshacer.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="assets/supabase-client.js"></script>
@@ -403,6 +404,9 @@
     const tarjeta = document.querySelector(`[data-pedido-id="${pedidoId}"]`);
     if (tarjeta) tarjeta.style.opacity = "0.5";
 
+    const pAnterior = rutaCache.find(x => x.id === pedidoId);
+    const estadoAnterior = pAnterior ? pAnterior.estado : null;
+
     const { error } = await supa.rpc("rechazar_pedido", {
       p_pedido_id: pedidoId,
       p_motivo: motivo || null
@@ -420,6 +424,19 @@
     // se saca directo de esta vista (queda para que el vendedor lo revise).
     rutaCache = rutaCache.filter(p => p.id !== pedidoId);
     renderRuta();
+
+    if (estadoAnterior) {
+      mostrarDeshacer("Pedido marcado como rechazado", async () => {
+        const { error: e2 } = await supa.rpc("deshacer_cambio_pedido", {
+          p_pedido_id: pedidoId,
+          p_estado: estadoAnterior,
+          p_necesita_atencion_vendedor: false,
+          p_limpiar_motivo: true
+        });
+        if (e2) throw e2;
+        await cargarRuta();
+      });
+    }
   }
 
   async function confirmarReagendar(pedidoId) {
@@ -427,6 +444,10 @@
     if (!nuevaFecha) return;
     const tarjeta = document.querySelector(`[data-pedido-id="${pedidoId}"]`);
     if (tarjeta) tarjeta.style.opacity = "0.5";
+
+    const pAnterior = rutaCache.find(x => x.id === pedidoId);
+    const fechaAnterior = pAnterior ? pAnterior.fecha : null;
+    const diaAnterior = pAnterior ? pAnterior.dia_reparto : null;
 
     const { error } = await supa.rpc("reagendar_pedido", {
       p_pedido_id: pedidoId,
@@ -445,11 +466,26 @@
     // se saca de esta vista (el admin lo va a incluir en la próxima ruta).
     rutaCache = rutaCache.filter(p => p.id !== pedidoId);
     renderRuta();
+
+    if (fechaAnterior) {
+      mostrarDeshacer("Pedido reagendado", async () => {
+        const { error: e2 } = await supa.rpc("deshacer_cambio_pedido", {
+          p_pedido_id: pedidoId,
+          p_fecha: fechaAnterior,
+          p_dia_reparto: diaAnterior
+        });
+        if (e2) throw e2;
+        await cargarRuta();
+      });
+    }
   }
 
   async function cambiarEstado(pedidoId, nuevoEstado) {
     const tarjeta = document.querySelector(`[data-pedido-id="${pedidoId}"]`);
     if (tarjeta) tarjeta.style.opacity = "0.5";
+
+    const pAnterior = rutaCache.find(x => x.id === pedidoId);
+    const estadoAnterior = pAnterior ? pAnterior.estado : null;
 
     const { error } = await supa.rpc("marcar_pedido_estado", {
       p_pedido_id: pedidoId,
@@ -465,6 +501,17 @@
     const p = rutaCache.find(x => x.id === pedidoId);
     if (p) p.estado = nuevoEstado;
     renderRuta();
+
+    if (estadoAnterior && estadoAnterior !== nuevoEstado) {
+      mostrarDeshacer(`Marcado como "${ESTADO_LABEL[nuevoEstado] || nuevoEstado}"`, async () => {
+        const { error: e2 } = await supa.rpc("deshacer_cambio_pedido", {
+          p_pedido_id: pedidoId,
+          p_estado: estadoAnterior
+        });
+        if (e2) throw e2;
+        await cargarRuta();
+      });
+    }
   }
 
   // ==========================================================================
