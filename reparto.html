@@ -13,6 +13,33 @@
      falta, en vez de encimarse con el resto del encabezado. */
   .topbar .brand{ flex-shrink:0; }
   .topbar .user-chip span{ max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* Botones nuevos de rechazar / reagendar, y su fila de formulario inline. */
+  .stop-btn-rechazar, .stop-btn-reagendar{
+    display:inline-flex; align-items:center; gap:5px; padding:9px 12px; border-radius:8px;
+    font-size:.78rem; font-weight:700; border:1px solid transparent; cursor:pointer; text-decoration:none;
+  }
+  .stop-btn-rechazar{ background:#fdecea; color:#c62828; border-color:#f5c6c2; }
+  .stop-btn-reagendar{ background:#fff3e0; color:#e65100; border-color:#ffd9a8; }
+  .badge-rechazado{ background:#fdecea; color:#c62828; }
+  .accion-inline{ margin-top:10px; }
+  .accion-inline-caja{
+    background:#f7f7f2; border:1px solid #e3e3da; border-radius:8px; padding:10px; margin-top:4px;
+  }
+  .accion-inline-caja label{ font-size:.76rem; font-weight:700; color:#555; display:block; margin-bottom:4px; }
+  .accion-inline-caja input, .accion-inline-caja textarea{
+    width:100%; border:1px solid #ccc; border-radius:6px; padding:8px; font-size:.85rem; font-family:inherit; box-sizing:border-box;
+  }
+  .accion-inline-caja textarea{ resize:vertical; min-height:52px; }
+  .accion-inline-botones{ display:flex; gap:8px; margin-top:8px; }
+  .accion-inline-botones button{ flex:1; padding:9px; border-radius:8px; font-size:.8rem; font-weight:700; border:none; cursor:pointer; }
+  .accion-inline-confirmar{ background:var(--verde-oscuro,#2f7d32); color:#fff; }
+  .accion-inline-cancelar{ background:#e5e5df; color:#444; }
+
+  /* Selector de fecha para ver entregados de un día puntual (evita que se
+     acumulen todos los entregados históricos en la vista). */
+  .filtro-entregados{ display:flex; align-items:center; gap:8px; margin-top:10px; font-size:.8rem; color:#666; }
+  .filtro-entregados input[type="date"]{ border:1px solid #ccc; border-radius:6px; padding:6px 8px; font-size:.82rem; }
 </style>
 </head>
 <body>
@@ -38,6 +65,10 @@
     <div class="progress-wrap"><div class="progress-fill" id="progresoFill" style="width:0%;"></div></div>
     <button class="btn btn-secondary btn-block" style="margin-top:14px;" onclick="cargarRuta()">🔄 Actualizar</button>
     <button class="btn btn-secondary btn-block" style="margin-top:10px;display:none;" id="rutaMapaBtn" onclick="toggleMapaRutaReparto()">🗺️ Ver mapa y ordenar mi ruta</button>
+    <div class="filtro-entregados">
+      <span>Ver entregados de:</span>
+      <input type="date" id="fechaEntregadosInput" onchange="cambiarFechaEntregados(this.value)">
+    </div>
   </section>
 
   <div id="mapaRutaRepartoWrap" style="display:none;">
@@ -81,15 +112,23 @@
   let perfilActual = null;
   let diaSeleccionado = diaDeHoy();
   let esAdmin = false;
+  let fechaEntregadosSeleccionada = new Date().toISOString().slice(0, 10);
 
   requireSession({ rolesPermitidos: ["repartidor", "admin"] }).then((perfil) => {
     if (!perfil) return;
     perfilActual = perfil;
     esAdmin = perfil.rol === "admin";
     document.getElementById("nombreRepartidor").textContent = perfil.nombre_completo;
+    document.getElementById("fechaEntregadosInput").value = fechaEntregadosSeleccionada;
     renderChipsDias();
     cargarRuta();
   });
+
+  function cambiarFechaEntregados(valor) {
+    if (!valor) return;
+    fechaEntregadosSeleccionada = valor;
+    cargarRuta();
+  }
 
   function renderChipsDias() {
     const hoy = diaDeHoy();
@@ -136,18 +175,33 @@
     const wrap = document.getElementById("rutaWrap");
     wrap.innerHTML = '<p class="empty-state">Cargando tu ruta...</p>';
 
-    const campos = "id, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, detalle_productos, total, forma_pago, estado, dia_reparto, observaciones, lat, lng, orden_ruta";
+    const campos = "id, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, detalle_productos, total, forma_pago, estado, dia_reparto, observaciones, lat, lng, orden_ruta, fecha";
 
-    let query = supa.from("pedidos").select(campos).in("estado", ["listo_despacho", "en_ruta", "entregado"]);
-    if (diaSeleccionado !== "__todos__") query = query.eq("dia_reparto", diaSeleccionado);
+    // Los pendientes se filtran por día de la semana (dia_reparto), como
+    // siempre. Los entregados se filtran aparte, por la fecha puntual
+    // elegida arriba — si no, se iban acumulando TODOS los entregados de
+    // todos los días con ese mismo dia_reparto y la vista quedaba enorme.
+    let queryPendientes = supa.from("pedidos").select(campos).in("estado", ["listo_despacho", "en_ruta"]);
+    if (diaSeleccionado !== "__todos__") queryPendientes = queryPendientes.eq("dia_reparto", diaSeleccionado);
 
-    const { data, error } = await query;
-    if (error) {
-      wrap.innerHTML = `<p class="empty-state">No se pudo cargar la ruta: ${error.message}</p>`;
+    const queryEntregados = supa.from("pedidos").select(campos)
+      .eq("estado", "entregado")
+      .eq("fecha", fechaEntregadosSeleccionada);
+
+    const [resPendientes, resEntregados] = await Promise.all([queryPendientes, queryEntregados]);
+
+    if (resPendientes.error) {
+      wrap.innerHTML = `<p class="empty-state">No se pudo cargar la ruta: ${resPendientes.error.message}</p>`;
+      return;
+    }
+    if (resEntregados.error) {
+      wrap.innerHTML = `<p class="empty-state">No se pudo cargar los entregados: ${resEntregados.error.message}</p>`;
       return;
     }
 
-    rutaCache = (data || []).slice().sort((a, b) => {
+    const data = [...(resPendientes.data || []), ...(resEntregados.data || [])];
+
+    rutaCache = data.slice().sort((a, b) => {
       // Pendientes de entregar primero, entregados al final. Dentro de cada
       // grupo, respeta el orden armado a mano con el mapa (orden_ruta) si
       // existe, y si no, ordena por comuna/dirección.
@@ -190,13 +244,22 @@
     const msjWsp = encodeURIComponent(`Hola ${p.nombre_cliente.split(" ")[0]}, te escribo de El Pelao Erasmo, voy en camino con tu pedido 🚚`);
 
     let botonesEstado = "";
+    let botonesAtencion = "";
     if (p.estado === "listo_despacho") {
       botonesEstado = `
         <button class="stop-btn-enruta" onclick="cambiarEstado('${p.id}','en_ruta')">🚚 Salí a repartir</button>
         <button class="stop-btn-entregado" onclick="cambiarEstado('${p.id}','entregado')">✅ Entregado</button>
       `;
+      botonesAtencion = `
+        <button class="stop-btn-reagendar" onclick="toggleAccionPedido('${p.id}','reagendar')">📅 Reagendar</button>
+        <button class="stop-btn-rechazar" onclick="toggleAccionPedido('${p.id}','rechazar')">❌ Rechazado</button>
+      `;
     } else if (p.estado === "en_ruta") {
       botonesEstado = `<button class="stop-btn-entregado" onclick="cambiarEstado('${p.id}','entregado')">✅ Entregado</button>`;
+      botonesAtencion = `
+        <button class="stop-btn-reagendar" onclick="toggleAccionPedido('${p.id}','reagendar')">📅 Reagendar</button>
+        <button class="stop-btn-rechazar" onclick="toggleAccionPedido('${p.id}','rechazar')">❌ Rechazado</button>
+      `;
     } else {
       botonesEstado = `<button class="stop-btn-entregado" disabled>✅ Entregado</button>`;
     }
@@ -222,9 +285,115 @@
           <a class="stop-btn-llamar" href="tel:${p.telefono}">📞 Llamar</a>
           ${telWsp ? `<a class="stop-btn-whatsapp" href="https://wa.me/${telWsp}?text=${msjWsp}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ""}
           ${botonesEstado}
+          ${botonesAtencion}
         </div>
+        <div class="accion-inline" id="accionInline_${p.id}"></div>
       </div>
     `;
+  }
+
+  // ==========================================================================
+  // RECHAZAR / REAGENDAR (cuando el cliente no recibe el pedido o pide otro día)
+  // ==========================================================================
+  let accionAbiertaId = null;
+  let accionAbiertaTipo = null;
+
+  function toggleAccionPedido(pedidoId, tipo) {
+    const contenedor = document.getElementById(`accionInline_${pedidoId}`);
+    if (!contenedor) return;
+
+    if (accionAbiertaId === pedidoId && accionAbiertaTipo === tipo) {
+      contenedor.innerHTML = "";
+      accionAbiertaId = null;
+      accionAbiertaTipo = null;
+      return;
+    }
+
+    // Si había otra tarjeta con un formulario abierto, se cierra primero.
+    if (accionAbiertaId && accionAbiertaId !== pedidoId) {
+      const otro = document.getElementById(`accionInline_${accionAbiertaId}`);
+      if (otro) otro.innerHTML = "";
+    }
+
+    accionAbiertaId = pedidoId;
+    accionAbiertaTipo = tipo;
+
+    if (tipo === "rechazar") {
+      contenedor.innerHTML = `
+        <div class="accion-inline-caja">
+          <label>¿Por qué se rechazó? (opcional, para avisarle al vendedor)</label>
+          <textarea id="motivoRechazo_${pedidoId}" placeholder="Ej: cliente no contesta, dirección no existe, se arrepintió..."></textarea>
+          <div class="accion-inline-botones">
+            <button class="accion-inline-cancelar" onclick="toggleAccionPedido('${pedidoId}','rechazar')">Cancelar</button>
+            <button class="accion-inline-confirmar" onclick="confirmarRechazo('${pedidoId}')">Confirmar rechazo</button>
+          </div>
+        </div>
+      `;
+    } else {
+      const manana = new Date();
+      manana.setDate(manana.getDate() + 1);
+      const fechaManana = manana.toISOString().slice(0, 10);
+      const hoyStr = new Date().toISOString().slice(0, 10);
+      contenedor.innerHTML = `
+        <div class="accion-inline-caja">
+          <label>¿Para qué día lo pidió el cliente?</label>
+          <input type="date" id="fechaReagendar_${pedidoId}" value="${fechaManana}" min="${hoyStr}">
+          <div class="accion-inline-botones">
+            <button class="accion-inline-cancelar" onclick="toggleAccionPedido('${pedidoId}','reagendar')">Cancelar</button>
+            <button class="accion-inline-confirmar" onclick="confirmarReagendar('${pedidoId}')">Confirmar</button>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  async function confirmarRechazo(pedidoId) {
+    const motivo = document.getElementById(`motivoRechazo_${pedidoId}`).value.trim();
+    const tarjeta = document.querySelector(`[data-pedido-id="${pedidoId}"]`);
+    if (tarjeta) tarjeta.style.opacity = "0.5";
+
+    const { error } = await supa.rpc("rechazar_pedido", {
+      p_pedido_id: pedidoId,
+      p_motivo: motivo || null
+    });
+
+    if (error) {
+      alert("No se pudo rechazar el pedido: " + error.message);
+      if (tarjeta) tarjeta.style.opacity = "1";
+      return;
+    }
+
+    accionAbiertaId = null;
+    accionAbiertaTipo = null;
+    // Un pedido rechazado ya no cuenta como pendiente ni entregado, así que
+    // se saca directo de esta vista (queda para que el vendedor lo revise).
+    rutaCache = rutaCache.filter(p => p.id !== pedidoId);
+    renderRuta();
+  }
+
+  async function confirmarReagendar(pedidoId) {
+    const nuevaFecha = document.getElementById(`fechaReagendar_${pedidoId}`).value;
+    if (!nuevaFecha) return;
+    const tarjeta = document.querySelector(`[data-pedido-id="${pedidoId}"]`);
+    if (tarjeta) tarjeta.style.opacity = "0.5";
+
+    const { error } = await supa.rpc("reagendar_pedido", {
+      p_pedido_id: pedidoId,
+      p_nueva_fecha: nuevaFecha
+    });
+
+    if (error) {
+      alert("No se pudo reagendar el pedido: " + error.message);
+      if (tarjeta) tarjeta.style.opacity = "1";
+      return;
+    }
+
+    accionAbiertaId = null;
+    accionAbiertaTipo = null;
+    // Vuelve a quedar "pendiente" para el día reagendado, así que también
+    // se saca de esta vista (el admin lo va a incluir en la próxima ruta).
+    rutaCache = rutaCache.filter(p => p.id !== pedidoId);
+    renderRuta();
   }
 
   async function cambiarEstado(pedidoId, nuevoEstado) {
@@ -295,7 +464,8 @@
   const ESTADO_LABEL = {
     listo_despacho: "Listo p/ despacho",
     en_ruta: "En ruta",
-    entregado: "Entregado"
+    entregado: "Entregado",
+    rechazado: "Rechazado"
   };
 </script>
 
