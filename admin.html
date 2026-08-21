@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel Administrador — El Pelao Erasmo</title>
 <link rel="stylesheet" href="assets/brand.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   table.comunas th, table.comunas td{ vertical-align:middle; }
   table.comunas input[type=number]{ width:110px; padding:7px; }
@@ -195,6 +196,15 @@
     <p style="font-size:.78rem;color:#888;margin:6px 0 0;display:none;" id="rutaPasarMananaAyuda">Para lo que quedó pendiente, en preparación, listo p/despacho o en ruta y NO se alcanzó a entregar hoy: lo mueve a la ruta de mañana en vez de perderlo. Lo ya entregado o anulado no se toca.</p>
     <p class="status-msg" id="rutaEnviarStatus"></p>
     <button class="btn btn-primary btn-block" style="margin-top:8px;display:none;" id="rutaExportarBtn" onclick="exportarRutaExcel()">Descargar Excel de esta ruta</button>
+    <button class="btn btn-secondary btn-block" style="margin-top:10px;display:none;" id="rutaMapaBtn" onclick="toggleMapaRutaAdmin()">🗺️ Ver y planificar en mapa</button>
+
+    <div id="mapaRutaAdminWrap" style="display:none;margin-top:14px;">
+      <p style="font-size:.78rem;color:#888;margin:0 0 8px;">Cada pin y cada parada tienen el mismo número y color, agrupados por comuna. Arrastra el ícono ⠿ de una parada para cambiar el orden en que se van a repartir.</p>
+      <div id="mapaRutaAdminMapa" style="height:320px;border-radius:10px;margin-bottom:10px;"></div>
+      <div id="mapaRutaAdminLista"></div>
+      <button class="btn btn-primary btn-block" style="margin-top:10px;" onclick="guardarOrdenRutaAdmin()">💾 Guardar orden de la ruta</button>
+      <p class="status-msg" id="mapaRutaAdminStatus"></p>
+    </div>
   </section>
 
   <section class="card">
@@ -565,10 +575,13 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="assets/supabase-client.js"></script>
 <script src="assets/pricing.js"></script>
 <script src="assets/auth-guard.js"></script>
 <script src="assets/informes.js"></script>
+<script src="assets/mapa-ruta.js"></script>
 <script>
   const DIAS = [
     { value: "", label: "Sin asignar" },
@@ -1868,7 +1881,12 @@
     const wrap = document.getElementById("rutaWrap");
     wrap.innerHTML = '<p class="empty-state">Buscando pedidos...</p>';
 
-    const camposPedido = "id, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, precio_unitario_pipeno, detalle_productos, total, forma_pago, estado, dia_reparto, vendedor_id";
+    // Cada vez que se genera una ruta nueva, se oculta el mapa de la ruta
+    // anterior (si estaba abierto) para no mostrar pines de otra ruta.
+    document.getElementById("mapaRutaAdminWrap").style.display = "none";
+    planificadorRutaAdmin = null;
+
+    const camposPedido = "id, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, precio_unitario_pipeno, detalle_productos, total, forma_pago, estado, dia_reparto, vendedor_id, lat, lng, orden_ruta";
 
     // diasFiltro = lista de días de reparto a incluir ("null" para el modo
     // "todos", que no filtra por día en absoluto). fechaConcreta solo se usa
@@ -1953,12 +1971,13 @@
       }
     }
 
-    rutaActual = [...(data || []), ...pedidosExtra].slice().sort((a, b) => {
-      const c = a.comuna.localeCompare(b.comuna, "es");
-      return c !== 0 ? c : a.direccion.localeCompare(b.direccion, "es");
-    });
+    // Si ya se guardó un orden de ruta (orden_ruta) para estos pedidos, se
+    // respeta ese orden primero — es el que se armó a mano con el mapa. Los
+    // que todavía no tienen orden guardado caen ordenados por comuna/dirección.
+    rutaActual = [...(data || []), ...pedidosExtra].slice().sort(comparadorOrdenRutaMapa);
 
     document.getElementById("rutaExportarBtn").style.display = rutaActual.length ? "flex" : "none";
+    document.getElementById("rutaMapaBtn").style.display = rutaActual.length ? "flex" : "none";
     document.getElementById("rutaEnviarBtn").style.display = rutaActual.length ? "flex" : "none";
     document.getElementById("rutaEnviarAyuda").style.display = rutaActual.length ? "block" : "none";
     document.getElementById("rutaPasarMananaBtn").style.display = rutaActual.length ? "flex" : "none";
@@ -2048,6 +2067,46 @@
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Ruta");
     XLSX.writeFile(libro, `ruta-${rutaTituloActual.includes("mañana") ? "manana" : "reparto"}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  // ==========================================================================
+  // MAPA DE LA RUTA (planificador con arrastrar y soltar)
+  // ==========================================================================
+  let planificadorRutaAdmin = null;
+
+  function toggleMapaRutaAdmin() {
+    if (!rutaActual.length) return;
+    const wrap = document.getElementById("mapaRutaAdminWrap");
+    const abrir = wrap.style.display === "none";
+    wrap.style.display = abrir ? "block" : "none";
+    if (!abrir) return;
+
+    if (!planificadorRutaAdmin) {
+      planificadorRutaAdmin = iniciarPlanificadorRutaMapa({
+        pedidos: rutaActual,
+        mapaContenedorId: "mapaRutaAdminMapa",
+        listaContenedorId: "mapaRutaAdminLista"
+      });
+      geocodificarConProgresoUIMapa(planificadorRutaAdmin, "mapaRutaAdminStatus");
+    }
+  }
+
+  async function guardarOrdenRutaAdmin() {
+    if (!planificadorRutaAdmin) return;
+    const status = document.getElementById("mapaRutaAdminStatus");
+    status.className = "status-msg";
+    status.textContent = "Guardando orden...";
+
+    const errores = await planificadorRutaAdmin.guardar();
+    rutaActual = planificadorRutaAdmin.obtenerOrdenActual();
+
+    if (errores > 0) {
+      status.classList.add("error");
+      status.textContent = `Se guardó, pero ${errores} parada(s) no se pudieron actualizar.`;
+    } else {
+      status.classList.add("ok");
+      status.textContent = "Orden de la ruta guardado. El repartidor lo va a ver en ese mismo orden.";
+    }
   }
 
   // Marca como "Listo p/ despacho" los pedidos de la ruta actual que todavía
