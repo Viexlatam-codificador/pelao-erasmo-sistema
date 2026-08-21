@@ -5,12 +5,57 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel Vendedor — El Pelao Erasmo</title>
 <link rel="stylesheet" href="assets/brand.css">
+<style>
+  .topbar-logo{ height:30px; width:30px; border-radius:6px; object-fit:cover; margin-right:8px; vertical-align:middle; }
+
+  .motivacional-banner{
+    background:linear-gradient(135deg,var(--verde-oscuro),var(--verde));
+    color:#fff; border-radius:12px; padding:14px 16px; margin-bottom:16px;
+    font-weight:700; font-size:.95rem; text-align:center; line-height:1.4;
+    box-shadow:0 4px 14px rgba(21,87,36,.25);
+  }
+
+  .alerta-atencion{
+    background:#fff8e1; border:1px solid #ffd9a8; border-radius:12px; padding:14px 16px; margin-bottom:16px;
+  }
+  .alerta-atencion-titulo{ font-weight:800; color:#8a4b00; margin-bottom:10px; font-size:.92rem; }
+  .alerta-atencion-item{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    background:#fff; border-radius:8px; padding:8px 10px; margin-bottom:8px; font-size:.85rem;
+  }
+  .alerta-atencion-item:last-child{ margin-bottom:0; }
+  .alerta-atencion-motivo{ font-size:.78rem; color:#886; margin-top:2px; }
+
+  .stats-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+  .stat-box{ background:#f7f7f2; border-radius:10px; padding:12px; text-align:center; }
+  .stat-num{ display:block; font-weight:800; font-size:1.1rem; color:var(--verde-oscuro); }
+  .stat-label{ display:block; font-size:.72rem; color:#888; margin-top:4px; }
+
+  .accion-inline-caja{
+    background:#f7f7f2; border:1px solid #e3e3da; border-radius:8px; padding:12px; margin:6px 0;
+  }
+  .accion-inline-caja label{ font-size:.76rem; font-weight:700; color:#555; display:block; margin:8px 0 4px; }
+  .accion-inline-caja label:first-child{ margin-top:0; }
+  .accion-inline-caja input, .accion-inline-caja select, .accion-inline-caja textarea{
+    width:100%; border:1px solid #ccc; border-radius:6px; padding:8px; font-size:.85rem; font-family:inherit; box-sizing:border-box;
+  }
+  .accion-inline-botones{ display:flex; gap:8px; margin-top:10px; }
+  .accion-inline-botones button{ flex:1; padding:9px; border-radius:8px; font-size:.8rem; font-weight:700; border:none; cursor:pointer; }
+  .accion-inline-confirmar{ background:var(--verde-oscuro); color:#fff; }
+  .accion-inline-cancelar{ background:#e5e5df; color:#444; }
+
+  .producto-extra-row{ display:flex; gap:6px; margin-bottom:6px; align-items:center; }
+  .producto-extra-row input{ box-sizing:border-box; }
+  .producto-extra-quitar{ background:none; border:none; color:var(--rojo); font-size:1.1rem; cursor:pointer; padding:4px 8px; }
+
+  .orders td, .orders th{ vertical-align:middle; }
+</style>
 </head>
 <body>
 
 <div class="flag-bar"></div>
 <div class="topbar">
-  <div class="brand">El Pelao Erasmo · Vendedor</div>
+  <div class="brand"><img class="topbar-logo" src="assets/logo.jpeg" alt="El Pelao Erasmo">Vendedor</div>
   <div class="user-chip">
     <span id="nombreVendedor">Cargando...</span>
     <button class="logout" onclick="cerrarSesion()">Salir</button>
@@ -18,6 +63,10 @@
 </div>
 
 <main class="shell">
+
+  <div class="motivacional-banner">"Dios te lleno de Habilidades, este es tu momento para ocuparlas"</div>
+
+  <div id="alertaAtencionWrap"></div>
 
   <section class="card">
     <h2 class="card-title">
@@ -65,16 +114,27 @@
     </div>
 
     <label>Comuna <span style="color:var(--rojo);">*</span></label>
-    <input type="text" id="comuna" placeholder="Ej: Providencia">
+    <input type="text" id="comuna" placeholder="Ej: Providencia" onblur="sugerirFechaSegunComuna()">
+    <p class="status-msg" id="sugerenciaDiaTexto" style="margin-top:2px;min-height:auto;"></p>
 
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
-        <label>Fecha del pedido</label>
+        <label>Fecha de entrega</label>
         <input type="date" id="fechaPedido">
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button type="button" class="btn btn-secondary" style="padding:6px 4px;font-size:.7rem;flex:1;" onclick="elegirFechaRapida('hoy')">Hoy</button>
+          <button type="button" class="btn btn-secondary" style="padding:6px 4px;font-size:.7rem;flex:1;" onclick="elegirFechaRapida('manana')">Mañana</button>
+          <button type="button" class="btn btn-secondary" style="padding:6px 4px;font-size:.7rem;flex:1;" onclick="sugerirFechaSegunComuna()">Según comuna</button>
+        </div>
       </div>
       <div style="flex:1;">
-        <label>Monto delivery ($)</label>
+        <label>Hora de entrega (opcional)</label>
+        <input type="text" id="horaEntrega" placeholder="Ej: entre 14 y 16 hrs">
+        <label style="margin-top:8px;">Monto delivery ($)</label>
         <input type="number" id="montoDelivery" min="0" value="0" placeholder="0">
+        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+          <input type="checkbox" id="envioGratis" style="width:auto;" onchange="onCambioEnvioGratis()"> Envío gratuito
+        </label>
       </div>
     </div>
 
@@ -99,6 +159,25 @@
     <label>Observaciones</label>
     <textarea id="observaciones" placeholder="Horario de entrega, referencias, etc."></textarea>
 
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--verde-oscuro);font-size:.85rem;">💲 Precios especiales / productos extra (opcional)</summary>
+      <div style="margin-top:10px;">
+        <div style="display:flex;gap:10px;">
+          <div style="flex:1;">
+            <label>Precio especial Pipeño c/u (opcional)</label>
+            <input type="number" id="precioEspecialPipeno" min="0" placeholder="Usar precio normal">
+          </div>
+          <div style="flex:1;">
+            <label>Precio especial Granadina c/u (opcional)</label>
+            <input type="number" id="precioEspecialGranadina" min="0" placeholder="Usar precio normal">
+          </div>
+        </div>
+        <label>Productos extra</label>
+        <div id="productosExtraWrap"></div>
+        <button type="button" class="btn btn-secondary" style="padding:8px 12px;font-size:.8rem;margin-top:4px;" onclick="agregarProductoExtra()">+ Agregar producto extra</button>
+      </div>
+    </details>
+
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:1px dashed #ddd;">
       <span style="font-weight:700;color:var(--verde-oscuro);">Total estimado</span>
       <span id="totalEstimado" style="font-weight:800;font-size:1.2rem;color:var(--verde-oscuro);">$0</span>
@@ -106,6 +185,16 @@
 
     <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="guardarPedido()">Guardar pedido</button>
     <p class="status-msg" id="formStatus"></p>
+
+    <button type="button" class="btn btn-secondary btn-block" style="margin-top:10px;" onclick="mostrarCotizacion()">📋 Ver cotización para enviar al cliente</button>
+    <div id="cotizacionWrap" style="display:none;margin-top:10px;">
+      <textarea id="cotizacionTexto" rows="10" style="font-family:monospace;font-size:.78rem;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button type="button" class="btn btn-secondary" style="flex:1;" onclick="copiarCotizacion()">📋 Copiar</button>
+        <button type="button" class="btn btn-primary" style="flex:1;" onclick="enviarCotizacionWhatsApp()">💬 Enviar WhatsApp</button>
+      </div>
+      <p class="status-msg" id="cotizacionStatus"></p>
+    </div>
   </section>
 
   <section class="card">
@@ -119,7 +208,7 @@
     </div>
   </section>
 
-  <section class="card">
+  <section class="card" id="misPedidosSection">
     <h2 class="card-title" style="justify-content:space-between;">
       <span style="display:flex;align-items:center;gap:8px;">
         <svg class="icon" viewBox="0 0 24 24"><path d="M6 2h12v19l-2-1-2 1-2-1-2 1-2-1-2 1V2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
@@ -135,15 +224,25 @@
   <section class="card">
     <h2 class="card-title">
       <svg class="icon" viewBox="0 0 24 24"><path d="M6 2h12v19l-2-1-2 1-2-1-2 1-2-1-2 1V2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
-      Informe semanal (PDF)
+      Mis estadísticas e informes
     </h2>
     <p style="font-size:.85rem;color:#666;margin:0 0 10px;">
-      Descarga un PDF con lo que vendiste esa semana, separando lo que ya se
-      entregó de verdad de lo que todavía está en curso.
+      Revisa cómo te ha ido y descarga un PDF con tus ventas — diario, semanal o mensual.
     </p>
-    <label>Semana a informar (elige cualquier día de esa semana)</label>
+    <label>Tipo de informe</label>
+    <select id="informeTipoPeriodo" onchange="onCambioTipoPeriodoInforme()">
+      <option value="dia">Diario</option>
+      <option value="semana" selected>Semanal</option>
+      <option value="mes">Mensual</option>
+    </select>
+    <label id="informeFechaLabel">Semana a informar (elige cualquier día de esa semana)</label>
     <input type="date" id="informeFechaVendedor">
-    <button class="btn btn-secondary btn-block" style="margin-top:14px;" onclick="descargarInformeSemanalPropio()">📄 Descargar informe PDF</button>
+    <input type="month" id="informeMesVendedor" style="display:none;">
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button class="btn btn-secondary" style="flex:1;" onclick="verMisEstadisticas()">📊 Ver estadísticas</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="descargarInformePropio()">📄 Descargar PDF</button>
+    </div>
+    <div id="estadisticasVendedorWrap"></div>
     <p class="status-msg" id="informeStatusVendedor"></p>
   </section>
 
@@ -164,10 +263,31 @@
     listo_despacho: "Listo p/ despacho",
     en_ruta: "En ruta",
     entregado: "Entregado",
-    anulado: "Anulado"
+    anulado: "Anulado",
+    rechazado: "Rechazado"
   };
 
+  const DIA_LABEL = {
+    lunes: "Lunes", martes: "Martes", miercoles: "Miércoles",
+    jueves: "Jueves", viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
+    sin_asignar: "Sin ruta asignada"
+  };
+  const DIAS_IDX = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 };
+
+  const PLANTILLAS_WSP_VENDEDOR = [
+    { id: "confirmacion", label: "✅ Confirmar pedido", texto: (p) => `Hola ${(p.nombre_cliente||"").split(" ")[0]}, soy ${perfilActual.nombre_completo} de *El Pelao Erasmo* 🍷. Te confirmo tu pedido para el ${p.fecha}, por un total de ${money(p.total)}. ¡Gracias por tu compra!` },
+    { id: "recordatorio", label: "💰 Recordar pago", texto: (p) => `Hola ${(p.nombre_cliente||"").split(" ")[0]}, te recuerdo el total de tu pedido de *El Pelao Erasmo*: ${money(p.total)} (${p.forma_pago}). ¡Cualquier consulta me escribes!` },
+    { id: "seguimiento", label: "📅 Coordinar / reagendar", texto: (p) => `Hola ${(p.nombre_cliente||"").split(" ")[0]}, te escribo de *El Pelao Erasmo* — necesitamos coordinar la entrega de tu pedido. ¿Me confirmas un día que te acomode?` }
+  ];
+
   let perfilActual = null;
+  let comunasCache = {};
+  let misPedidosCache = [];
+  let pedidosAtencion = [];
+  let productosExtraCache = [];
+  let productoExtraSeq = 0;
+  let edicionAbiertaId = null;
+  let plantillaAbiertaId = null;
 
   requireSession({ rolesPermitidos: ["vendedor", "admin"] }).then((perfil) => {
     if (!perfil) return;
@@ -176,10 +296,21 @@
     document.getElementById("perfilNombre").value = perfil.nombre_completo || "";
     document.getElementById("perfilTelefono").value = perfil.telefono_whatsapp || "";
     document.getElementById("informeFechaVendedor").value = new Date().toISOString().slice(0, 10);
+    document.getElementById("informeMesVendedor").value = new Date().toISOString().slice(0, 7);
     document.getElementById("fechaPedido").value = new Date().toISOString().slice(0, 10);
     cargarMisPedidos();
     cargarComunas();
+    cargarAlertasAtencion();
+    verMisEstadisticas();
   });
+
+  function escAttr(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
 
   async function guardarMiPerfil() {
     const status = document.getElementById("perfilStatus");
@@ -213,6 +344,50 @@
     status.textContent = "Perfil actualizado correctamente.";
   }
 
+  // ==========================================================================
+  // AVISO PERSISTENTE (pedidos rechazados o reagendados que necesitan revisión)
+  // ==========================================================================
+  async function cargarAlertasAtencion() {
+    const { data, error } = await supa
+      .from("pedidos")
+      .select("id, nombre_cliente, comuna, motivo_rechazo, estado, fecha")
+      .eq("vendedor_id", perfilActual.id)
+      .eq("necesita_atencion_vendedor", true)
+      .order("actualizado_en", { ascending: false });
+
+    if (error) return;
+    pedidosAtencion = data || [];
+    renderAlertasAtencion();
+  }
+
+  function renderAlertasAtencion() {
+    const wrap = document.getElementById("alertaAtencionWrap");
+    if (!pedidosAtencion.length) { wrap.innerHTML = ""; return; }
+    wrap.innerHTML = `
+      <div class="alerta-atencion">
+        <div class="alerta-atencion-titulo">⚠️ ${pedidosAtencion.length} pedido${pedidosAtencion.length === 1 ? "" : "s"} necesita${pedidosAtencion.length === 1 ? "" : "n"} tu atención</div>
+        ${pedidosAtencion.map(p => `
+          <div class="alerta-atencion-item">
+            <div>
+              <strong>${p.nombre_cliente}</strong> · ${p.comuna}
+              <span class="badge badge-${p.estado}" style="margin-left:6px;">${ESTADO_LABEL[p.estado] || p.estado}</span>
+              ${p.motivo_rechazo ? `<div class="alerta-atencion-motivo">📝 ${p.motivo_rechazo}</div>` : ""}
+            </div>
+            <button class="btn btn-secondary" style="padding:7px 10px;font-size:.78rem;flex:none;width:auto;" onclick="revisarPedidoAtencion('${p.id}')">Revisar</button>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function revisarPedidoAtencion(id) {
+    document.getElementById("misPedidosSection").scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => abrirEdicionPedidoVendedor(id), 300);
+  }
+
+  // ==========================================================================
+  // COMUNAS Y SUGERENCIA DE DÍA/FECHA
+  // ==========================================================================
   async function cargarComunas() {
     const wrap = document.getElementById("comunasWrap");
     const { data, error } = await supa
@@ -225,11 +400,8 @@
       return;
     }
 
-    const DIA_LABEL = {
-      lunes: "Lunes", martes: "Martes", miercoles: "Miércoles",
-      jueves: "Jueves", viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
-      sin_asignar: "Sin ruta asignada"
-    };
+    comunasCache = {};
+    data.forEach(c => { comunasCache[normalizeComuna(c.comuna)] = c; });
 
     const filas = data.map(c => `
       <tr>
@@ -247,6 +419,599 @@
         <tbody>${filas}</tbody>
       </table>
     `;
+  }
+
+  function proximaFechaParaDia(diaValor) {
+    const objetivo = DIAS_IDX[diaValor];
+    if (objetivo === undefined) return null;
+    const hoy = new Date();
+    const delta = (objetivo - hoy.getDay() + 7) % 7;
+    const resultado = new Date(hoy);
+    resultado.setDate(hoy.getDate() + delta);
+    return resultado.toISOString().slice(0, 10);
+  }
+
+  function sugerirFechaSegunComuna() {
+    const comuna = document.getElementById("comuna").value.trim();
+    const info = comunasCache[normalizeComuna(comuna)];
+    const status = document.getElementById("sugerenciaDiaTexto");
+    status.className = "status-msg";
+    if (!comuna) { status.textContent = ""; return; }
+    if (!info || !info.dia_reparto || info.dia_reparto === "sin_asignar") {
+      status.classList.add("error");
+      status.textContent = "No hay día de reparto asignado todavía para esa comuna.";
+      return;
+    }
+    const fecha = proximaFechaParaDia(info.dia_reparto);
+    if (fecha) {
+      document.getElementById("fechaPedido").value = fecha;
+      status.classList.add("ok");
+      status.textContent = `Sugerido: ${DIA_LABEL[info.dia_reparto] || info.dia_reparto} ${fecha} (día habitual de reparto en ${comuna}).`;
+      if (info.precio_despacho != null && !document.getElementById("envioGratis").checked) {
+        document.getElementById("montoDelivery").value = info.precio_despacho;
+        actualizarTotales();
+      }
+    }
+  }
+
+  function elegirFechaRapida(tipo) {
+    const hoy = new Date();
+    if (tipo === "manana") hoy.setDate(hoy.getDate() + 1);
+    document.getElementById("fechaPedido").value = hoy.toISOString().slice(0, 10);
+  }
+
+  // ==========================================================================
+  // PRODUCTOS EXTRA / PRECIOS ESPECIALES (nuevo pedido)
+  // ==========================================================================
+  function agregarProductoExtra() {
+    productosExtraCache.push({ id: ++productoExtraSeq, nombre: "", cantidad: 1, precio: 0 });
+    renderProductosExtra();
+  }
+
+  function quitarProductoExtra(id) {
+    productosExtraCache = productosExtraCache.filter(p => p.id !== id);
+    renderProductosExtra();
+    actualizarTotales();
+  }
+
+  function actualizarProductoExtra(id, campo, valor) {
+    const p = productosExtraCache.find(p => p.id === id);
+    if (p) p[campo] = valor;
+    actualizarTotales();
+  }
+
+  function renderProductosExtra() {
+    const wrap = document.getElementById("productosExtraWrap");
+    wrap.innerHTML = productosExtraCache.map(p => `
+      <div class="producto-extra-row">
+        <input type="text" placeholder="Nombre" value="${escAttr(p.nombre)}" style="flex:2;" oninput="actualizarProductoExtra(${p.id},'nombre',this.value)">
+        <input type="number" min="1" placeholder="Cant" value="${p.cantidad}" style="flex:1;" oninput="actualizarProductoExtra(${p.id},'cantidad',this.value)">
+        <input type="number" min="0" placeholder="Precio c/u" value="${p.precio}" style="flex:1;" oninput="actualizarProductoExtra(${p.id},'precio',this.value)">
+        <button type="button" class="producto-extra-quitar" onclick="quitarProductoExtra(${p.id})">✕</button>
+      </div>
+    `).join("");
+  }
+
+  function onCambioEnvioGratis() {
+    const chk = document.getElementById("envioGratis").checked;
+    const input = document.getElementById("montoDelivery");
+    input.disabled = chk;
+    if (chk) { input.dataset.prev = input.value; input.value = 0; }
+    else if (input.dataset.prev) { input.value = input.dataset.prev; }
+    actualizarTotales();
+  }
+
+  function actualizarTotales() {
+    const regionKey = document.getElementById("region").value;
+    const cantidadPipeno = parseInt(document.getElementById("cantidadPipeno").value || "0", 10);
+    const cantidadGranadina = parseInt(document.getElementById("cantidadGranadina").value || "0", 10);
+    const montoDelivery = parseInt(document.getElementById("montoDelivery").value || "0", 10);
+    const region = PRICING[regionKey];
+
+    const resultado = calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPrecioDespacho: montoDelivery });
+
+    const precioEspecialPipenoRaw = document.getElementById("precioEspecialPipeno").value;
+    const precioEspecialPipeno = precioEspecialPipenoRaw === "" ? NaN : parseInt(precioEspecialPipenoRaw, 10);
+    if (!isNaN(precioEspecialPipeno) && precioEspecialPipeno >= 0) {
+      resultado.precioUnitarioPipeno = precioEspecialPipeno;
+      resultado.subtotalPipeno = cantidadPipeno * precioEspecialPipeno;
+    }
+
+    const precioEspecialGranadinaRaw = document.getElementById("precioEspecialGranadina").value;
+    const precioEspecialGranadina = precioEspecialGranadinaRaw === "" ? NaN : parseInt(precioEspecialGranadinaRaw, 10);
+    if (!isNaN(precioEspecialGranadina) && precioEspecialGranadina >= 0) {
+      resultado.subtotalGranadina = cantidadGranadina * precioEspecialGranadina;
+    }
+
+    const subtotalExtras = productosExtraCache.reduce((s, p) => s + (Number(p.cantidad) || 0) * (Number(p.precio) || 0), 0);
+    const totalFinal = resultado.subtotalPipeno + resultado.subtotalGranadina + resultado.despacho + subtotalExtras;
+
+    const tierInfo = document.getElementById("tierInfo");
+    if (cantidadPipeno > 0 && cantidadPipeno < region.min) {
+      tierInfo.style.color = "var(--rojo)";
+      tierInfo.textContent = `Pedido mínimo en ${region.label}: ${region.min} bidones.`;
+    } else if (resultado.tier) {
+      tierInfo.style.color = "#666";
+      tierInfo.textContent = `Precio unitario aplicado: ${money(resultado.precioUnitarioPipeno)} c/u`;
+    } else {
+      tierInfo.textContent = "";
+    }
+
+    document.getElementById("totalEstimado").textContent = money(totalFinal);
+    return { ...resultado, subtotalExtras, total: totalFinal };
+  }
+
+  ["region", "cantidadPipeno", "cantidadGranadina", "montoDelivery", "precioEspecialPipeno", "precioEspecialGranadina"].forEach((id) => {
+    document.getElementById(id).addEventListener("input", actualizarTotales);
+    document.getElementById(id).addEventListener("change", actualizarTotales);
+  });
+  actualizarTotales();
+
+  // ==========================================================================
+  // MINI COTIZACIÓN
+  // ==========================================================================
+  function normalizarTelefonoWspVendedor(telefonoRaw) {
+    let digitos = (telefonoRaw || "").replace(/\D/g, "");
+    if (!digitos) return null;
+    if (digitos.startsWith("56")) return digitos;
+    if (digitos.startsWith("9") && digitos.length === 9) return "56" + digitos;
+    if (digitos.length === 8) return "569" + digitos;
+    return digitos;
+  }
+
+  function generarTextoCotizacion() {
+    const nombreCliente = document.getElementById("nombreCliente").value.trim() || "Cliente";
+    const comuna = document.getElementById("comuna").value.trim();
+    const direccion = document.getElementById("direccion").value.trim();
+    const numero = document.getElementById("numero").value.trim();
+    const cantidadPipeno = parseInt(document.getElementById("cantidadPipeno").value || "0", 10);
+    const cantidadGranadina = parseInt(document.getElementById("cantidadGranadina").value || "0", 10);
+    const fechaPedido = document.getElementById("fechaPedido").value;
+    const resultado = actualizarTotales();
+
+    const lineas = [];
+    lineas.push(`*El Pelao Erasmo* — Cotización`);
+    lineas.push(``);
+    lineas.push(`Hola ${nombreCliente.split(" ")[0]}, te dejamos el detalle de tu pedido:`);
+    lineas.push(``);
+    if (cantidadPipeno > 0) lineas.push(`• Pipeño 5L x${cantidadPipeno} — ${money(resultado.precioUnitarioPipeno)} c/u`);
+    if (cantidadGranadina > 0) lineas.push(`• Granadina x${cantidadGranadina}`);
+    productosExtraCache.filter(p => p.nombre && (Number(p.cantidad) || 0) > 0).forEach(p => {
+      lineas.push(`• ${p.nombre} x${p.cantidad} — ${money(p.precio)} c/u`);
+    });
+    lineas.push(`• Despacho: ${document.getElementById("envioGratis").checked ? "Gratis 🎁" : money(resultado.despacho)}`);
+    lineas.push(``);
+    lineas.push(`*Total: ${money(resultado.total)}*`);
+    if (comuna) lineas.push(`Dirección: ${direccion} ${numero}, ${comuna}`);
+    if (fechaPedido) lineas.push(`Fecha de entrega: ${fechaPedido}`);
+    const hora = document.getElementById("horaEntrega").value.trim();
+    if (hora) lineas.push(`Horario: ${hora}`);
+    lineas.push(``);
+    lineas.push(`¡Gracias por tu compra! 🙌`);
+    return lineas.join("\n");
+  }
+
+  function mostrarCotizacion() {
+    document.getElementById("cotizacionTexto").value = generarTextoCotizacion();
+    document.getElementById("cotizacionWrap").style.display = "block";
+  }
+
+  function copiarCotizacion() {
+    const texto = document.getElementById("cotizacionTexto").value;
+    const status = document.getElementById("cotizacionStatus");
+    navigator.clipboard.writeText(texto).then(() => {
+      status.className = "status-msg ok";
+      status.textContent = "Copiado ✔️";
+      setTimeout(() => { status.textContent = ""; status.className = "status-msg"; }, 2500);
+    }).catch(() => {
+      alert("No se pudo copiar automáticamente. Selecciona el texto y cópialo manualmente.");
+    });
+  }
+
+  function enviarCotizacionWhatsApp() {
+    const texto = document.getElementById("cotizacionTexto").value;
+    const telWsp = normalizarTelefonoWspVendedor(document.getElementById("telefono").value.trim());
+    const url = telWsp
+      ? `https://wa.me/${telWsp}?text=${encodeURIComponent(texto)}`
+      : `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    window.open(url, "_blank");
+  }
+
+  // ==========================================================================
+  // GUARDAR NUEVO PEDIDO
+  // ==========================================================================
+  async function guardarPedido() {
+    const status = document.getElementById("formStatus");
+    status.className = "status-msg";
+    status.textContent = "";
+
+    const regionKey = document.getElementById("region").value;
+    const region = PRICING[regionKey];
+    const nombreCliente = document.getElementById("nombreCliente").value.trim();
+    const telefono = document.getElementById("telefono").value.trim();
+    const direccion = document.getElementById("direccion").value.trim();
+    const numero = document.getElementById("numero").value.trim();
+    const departamento = document.getElementById("departamento").value.trim();
+    const comuna = document.getElementById("comuna").value.trim();
+    const observaciones = document.getElementById("observaciones").value.trim();
+    const formaPago = document.getElementById("formaPago").value;
+    const fechaPedido = document.getElementById("fechaPedido").value;
+    const horaEntrega = document.getElementById("horaEntrega").value.trim();
+    const envioGratis = document.getElementById("envioGratis").checked;
+    const cantidadPipeno = parseInt(document.getElementById("cantidadPipeno").value || "0", 10);
+    const cantidadGranadina = parseInt(document.getElementById("cantidadGranadina").value || "0", 10);
+
+    if (!nombreCliente || !telefono || !direccion || !numero || !comuna) {
+      status.classList.add("error");
+      status.textContent = "Completa nombre, teléfono, dirección, número y comuna.";
+      return;
+    }
+    if (cantidadPipeno === 0 && cantidadGranadina === 0 && !productosExtraCache.length) {
+      status.classList.add("error");
+      status.textContent = "Ingresa al menos una cantidad de Pipeño, Granadina o un producto extra.";
+      return;
+    }
+
+    const resultado = actualizarTotales();
+    const detalleProductos = productosExtraCache
+      .filter(p => p.nombre && p.nombre.trim() && (Number(p.cantidad) || 0) > 0)
+      .map(p => ({
+        nombre: p.nombre.trim(), unidad: "", cantidad: Number(p.cantidad) || 0,
+        precio_unitario: Number(p.precio) || 0, subtotal: (Number(p.cantidad) || 0) * (Number(p.precio) || 0)
+      }));
+
+    const payload = {
+      nombre_cliente: nombreCliente,
+      telefono,
+      direccion,
+      numero,
+      departamento: departamento || null,
+      comuna,
+      region: region.label,
+      cantidad_pipeno: cantidadPipeno,
+      precio_unitario_pipeno: resultado.precioUnitarioPipeno,
+      cantidad_granadina: cantidadGranadina,
+      detalle_productos: detalleProductos,
+      observaciones: observaciones || null,
+      forma_pago: formaPago,
+      hora_entrega: horaEntrega || null,
+      envio_gratis: envioGratis,
+      total: resultado.total,
+      vendedor_id: perfilActual.id
+    };
+    if (fechaPedido) payload.fecha = fechaPedido;
+
+    const { error } = await supa.from("pedidos").insert(payload);
+
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo guardar el pedido: " + error.message;
+      return;
+    }
+
+    status.classList.add("ok");
+    status.textContent = "Pedido guardado correctamente.";
+    ["nombreCliente", "telefono", "direccion", "numero", "departamento", "comuna", "observaciones", "horaEntrega"].forEach(id => {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("cantidadPipeno").value = 0;
+    document.getElementById("cantidadGranadina").value = 0;
+    document.getElementById("montoDelivery").value = 0;
+    document.getElementById("envioGratis").checked = false;
+    document.getElementById("montoDelivery").disabled = false;
+    document.getElementById("precioEspecialPipeno").value = "";
+    document.getElementById("precioEspecialGranadina").value = "";
+    document.getElementById("sugerenciaDiaTexto").textContent = "";
+    productosExtraCache = [];
+    renderProductosExtra();
+    document.getElementById("cotizacionWrap").style.display = "none";
+    actualizarTotales();
+    cargarMisPedidos();
+  }
+
+  // ==========================================================================
+  // MIS PEDIDOS (listado + editar propios + llamar/whatsapp)
+  // ==========================================================================
+  function filaEditable(p) {
+    return p.estado === "pendiente" || p.estado === "preparacion" || p.estado === "rechazado";
+  }
+
+  async function cargarMisPedidos() {
+    const wrap = document.getElementById("misPedidosWrap");
+    const campos = "id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, dia_reparto, cantidad_pipeno, cantidad_granadina, precio_unitario_pipeno, detalle_productos, forma_pago, observaciones, hora_entrega, envio_gratis, motivo_rechazo, necesita_atencion_vendedor, total, estado, creado_en";
+    const { data, error } = await supa
+      .from("pedidos")
+      .select(campos)
+      .order("creado_en", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      wrap.innerHTML = `<p class="empty-state">No se pudieron cargar tus pedidos.</p>`;
+      return;
+    }
+    misPedidosCache = data || [];
+    edicionAbiertaId = null;
+    plantillaAbiertaId = null;
+
+    if (!misPedidosCache.length) {
+      wrap.innerHTML = `<p class="empty-state">Todavía no has ingresado pedidos.</p>`;
+      return;
+    }
+
+    const filas = misPedidosCache.map(p => {
+      const telWsp = normalizarTelefonoWspVendedor(p.telefono);
+      return `
+        <tr data-mis-pedido-id="${p.id}">
+          <td>${p.fecha}</td>
+          <td>${p.nombre_cliente}</td>
+          <td>${p.comuna}</td>
+          <td>${p.dia_reparto === "sin_asignar" ? "Sin ruta" : (p.dia_reparto || "-")}</td>
+          <td>${money(p.total)}</td>
+          <td><span class="badge badge-${p.estado}">${ESTADO_LABEL[p.estado] || p.estado}</span></td>
+          <td>
+            <div class="stop-actions" style="justify-content:flex-start;flex-wrap:nowrap;">
+              <a class="stop-btn-llamar" href="tel:${p.telefono}" title="Llamar">📞</a>
+              ${telWsp ? `<button type="button" class="stop-btn-whatsapp" title="WhatsApp" onclick="toggleWhatsAppPlantillas('${p.id}')">💬</button>` : ""}
+              ${filaEditable(p) ? `<button type="button" class="stop-btn-enruta" title="Editar" onclick="abrirEdicionPedidoVendedor('${p.id}')">✏️</button>` : ""}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    wrap.innerHTML = `
+      <table class="orders">
+        <thead>
+          <tr><th>Fecha</th><th>Cliente</th><th>Comuna</th><th>Día ruta</th><th>Total</th><th>Estado</th><th>Acciones</th></tr>
+        </thead>
+        <tbody>${filas}</tbody>
+      </table>
+    `;
+  }
+
+  function toggleWhatsAppPlantillas(id) {
+    const existente = document.getElementById(`plantillasFila_${id}`);
+    if (existente) { existente.remove(); plantillaAbiertaId = null; return; }
+
+    const filaEdicion = document.getElementById(`edicionFila_${edicionAbiertaId}`);
+    if (filaEdicion) { filaEdicion.remove(); edicionAbiertaId = null; }
+    if (plantillaAbiertaId) { document.getElementById(`plantillasFila_${plantillaAbiertaId}`)?.remove(); }
+
+    plantillaAbiertaId = id;
+    const p = misPedidosCache.find(x => x.id === id);
+    const fila = document.querySelector(`tr[data-mis-pedido-id="${id}"]`);
+    if (!p || !fila) return;
+
+    const tr = document.createElement("tr");
+    tr.id = `plantillasFila_${id}`;
+    tr.innerHTML = `
+      <td colspan="7">
+        <div class="accion-inline-caja">
+          <label>Elige un mensaje para enviarle por WhatsApp:</label>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            ${PLANTILLAS_WSP_VENDEDOR.map(pl => `<button type="button" class="btn btn-secondary" style="text-align:left;font-size:.8rem;" onclick="enviarPlantillaWhatsApp('${id}','${pl.id}')">${pl.label}</button>`).join("")}
+          </div>
+        </div>
+      </td>
+    `;
+    fila.after(tr);
+  }
+
+  function enviarPlantillaWhatsApp(pedidoId, plantillaId) {
+    const p = misPedidosCache.find(x => x.id === pedidoId);
+    const plantilla = PLANTILLAS_WSP_VENDEDOR.find(pl => pl.id === plantillaId);
+    if (!p || !plantilla) return;
+    const telWsp = normalizarTelefonoWspVendedor(p.telefono);
+    const texto = plantilla.texto(p);
+    if (telWsp) window.open(`https://wa.me/${telWsp}?text=${encodeURIComponent(texto)}`, "_blank");
+    toggleWhatsAppPlantillas(pedidoId);
+  }
+
+  function despachoActualDePedido(p) {
+    const subtotalPipeno = (p.cantidad_pipeno || 0) * (p.precio_unitario_pipeno || 0);
+    const subtotalGranadina = (p.cantidad_granadina || 0) * GRANADINA_PRICE;
+    const subtotalExtras = (p.detalle_productos || []).reduce((s, l) => s + (l.subtotal || ((l.cantidad || 0) * (l.precio_unitario || 0))), 0);
+    const resto = (p.total || 0) - subtotalPipeno - subtotalGranadina - subtotalExtras;
+    return resto > 0 ? Math.round(resto) : 0;
+  }
+
+  function abrirEdicionPedidoVendedor(id) {
+    const filaPlantillas = document.getElementById(`plantillasFila_${plantillaAbiertaId}`);
+    if (filaPlantillas) { filaPlantillas.remove(); plantillaAbiertaId = null; }
+
+    const filaExistente = document.getElementById(`edicionFila_${id}`);
+    if (filaExistente) { filaExistente.remove(); edicionAbiertaId = null; return; }
+
+    if (edicionAbiertaId && edicionAbiertaId !== id) {
+      document.getElementById(`edicionFila_${edicionAbiertaId}`)?.remove();
+    }
+    edicionAbiertaId = id;
+
+    const p = misPedidosCache.find(x => x.id === id);
+    if (!p) return;
+
+    if (p.estado === "rechazado") {
+      renderReactivarPedidoVendedor(p);
+    } else {
+      renderFormularioEdicionVendedor(p);
+    }
+  }
+
+  function renderReactivarPedidoVendedor(p) {
+    const fila = document.querySelector(`tr[data-mis-pedido-id="${p.id}"]`);
+    if (!fila) return;
+    const manana = new Date();
+    manana.setDate(manana.getDate() + 1);
+    const tr = document.createElement("tr");
+    tr.id = `edicionFila_${p.id}`;
+    tr.innerHTML = `
+      <td colspan="7">
+        <div class="accion-inline-caja">
+          <p style="margin:0;font-size:.82rem;color:#c62828;">❌ Este pedido fue rechazado por el repartidor${p.motivo_rechazo ? ": " + escAttr(p.motivo_rechazo) : "."}</p>
+          <label>Nueva fecha de entrega para reactivarlo</label>
+          <input type="date" id="reactivarFecha_${p.id}" value="${manana.toISOString().slice(0, 10)}">
+          <div class="accion-inline-botones">
+            <button type="button" class="accion-inline-cancelar" onclick="abrirEdicionPedidoVendedor('${p.id}')">Cancelar</button>
+            <button type="button" class="accion-inline-confirmar" onclick="confirmarReactivarPedidoVendedor('${p.id}')">Reactivar pedido</button>
+          </div>
+          <p class="status-msg" id="reactivarStatus_${p.id}"></p>
+        </div>
+      </td>
+    `;
+    fila.after(tr);
+  }
+
+  async function confirmarReactivarPedidoVendedor(id) {
+    const nuevaFecha = document.getElementById(`reactivarFecha_${id}`).value;
+    const status = document.getElementById(`reactivarStatus_${id}`);
+    if (!nuevaFecha) return;
+    status.className = "status-msg";
+    status.textContent = "Reactivando...";
+
+    const { error } = await supa.rpc("vendedor_reactivar_pedido_rechazado", { p_pedido_id: id, p_nueva_fecha: nuevaFecha });
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo reactivar: " + error.message;
+      return;
+    }
+
+    edicionAbiertaId = null;
+    document.getElementById(`edicionFila_${id}`)?.remove();
+    await cargarMisPedidos();
+    await cargarAlertasAtencion();
+    abrirEdicionPedidoVendedor(id);
+  }
+
+  function onCambioEnvioGratisEdicion(id) {
+    const chk = document.getElementById(`ed_enviogratis_${id}`).checked;
+    const input = document.getElementById(`ed_despacho_${id}`);
+    input.disabled = chk;
+    if (chk) { input.dataset.prev = input.value; input.value = 0; }
+    else if (input.dataset.prev) { input.value = input.dataset.prev; }
+  }
+
+  function renderFormularioEdicionVendedor(p) {
+    const fila = document.querySelector(`tr[data-mis-pedido-id="${p.id}"]`);
+    if (!fila) return;
+    const despachoActual = despachoActualDePedido(p);
+    const tr = document.createElement("tr");
+    tr.id = `edicionFila_${p.id}`;
+    tr.innerHTML = `
+      <td colspan="7">
+        <div class="accion-inline-caja">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:140px;"><label>Cliente</label><input type="text" id="ed_nombre_${p.id}" value="${escAttr(p.nombre_cliente)}"></div>
+            <div style="flex:1;min-width:140px;"><label>Teléfono</label><input type="tel" id="ed_telefono_${p.id}" value="${escAttr(p.telefono)}"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <div style="flex:2;min-width:160px;"><label>Dirección</label><input type="text" id="ed_direccion_${p.id}" value="${escAttr(p.direccion)}"></div>
+            <div style="flex:1;min-width:80px;"><label>Número</label><input type="text" id="ed_numero_${p.id}" value="${escAttr(p.numero)}"></div>
+            <div style="flex:1;min-width:100px;"><label>Depto</label><input type="text" id="ed_depto_${p.id}" value="${escAttr(p.departamento || "")}"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:140px;"><label>Comuna</label><input type="text" id="ed_comuna_${p.id}" value="${escAttr(p.comuna)}"></div>
+            <div style="flex:1;min-width:130px;"><label>Fecha entrega</label><input type="date" id="ed_fecha_${p.id}" value="${p.fecha}"></div>
+            <div style="flex:1;min-width:140px;"><label>Hora entrega (opcional)</label><input type="text" id="ed_hora_${p.id}" placeholder="Ej: 14 a 16 hrs" value="${escAttr(p.hora_entrega || "")}"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:120px;"><label>Bidones Pipeño</label><input type="number" min="0" id="ed_pipeno_${p.id}" value="${p.cantidad_pipeno}"></div>
+            <div style="flex:1;min-width:120px;"><label>Precio especial c/u (opcional)</label><input type="number" min="0" id="ed_precioespecial_${p.id}" placeholder="Usar precio normal"></div>
+            <div style="flex:1;min-width:120px;"><label>Displays Granadina</label><input type="number" min="0" id="ed_granadina_${p.id}" value="${p.cantidad_granadina}"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:140px;">
+              <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="ed_enviogratis_${p.id}" style="width:auto;" ${p.envio_gratis ? "checked" : ""} onchange="onCambioEnvioGratisEdicion('${p.id}')"> Envío gratuito</label>
+            </div>
+            <div style="flex:1;min-width:120px;"><label>Monto envío</label><input type="number" min="0" id="ed_despacho_${p.id}" value="${despachoActual}" ${p.envio_gratis ? "disabled" : ""}></div>
+            <div style="flex:1;min-width:160px;">
+              <label>Forma de pago</label>
+              <select id="ed_formapago_${p.id}">
+                <option value="Efectivo contra entrega" ${p.forma_pago === "Efectivo contra entrega" ? "selected" : ""}>Efectivo contra entrega</option>
+                <option value="Transferencia contra entrega" ${p.forma_pago === "Transferencia contra entrega" ? "selected" : ""}>Transferencia contra entrega</option>
+              </select>
+            </div>
+          </div>
+          <label>Observaciones</label>
+          <textarea id="ed_obs_${p.id}">${escAttr(p.observaciones || "")}</textarea>
+          <div class="accion-inline-botones">
+            <button type="button" class="accion-inline-cancelar" onclick="abrirEdicionPedidoVendedor('${p.id}')">Cancelar</button>
+            <button type="button" class="accion-inline-confirmar" onclick="guardarEdicionPedidoVendedor('${p.id}')">Guardar cambios</button>
+          </div>
+          <p class="status-msg" id="ed_status_${p.id}"></p>
+        </div>
+      </td>
+    `;
+    fila.after(tr);
+  }
+
+  async function guardarEdicionPedidoVendedor(id) {
+    const status = document.getElementById(`ed_status_${id}`);
+    status.className = "status-msg";
+    status.textContent = "";
+
+    const p = misPedidosCache.find(x => x.id === id);
+    if (!p) return;
+
+    const nombre_cliente = document.getElementById(`ed_nombre_${id}`).value.trim();
+    const telefono = document.getElementById(`ed_telefono_${id}`).value.trim();
+    const direccion = document.getElementById(`ed_direccion_${id}`).value.trim();
+    const numero = document.getElementById(`ed_numero_${id}`).value.trim();
+    const departamento = document.getElementById(`ed_depto_${id}`).value.trim();
+    const comuna = document.getElementById(`ed_comuna_${id}`).value.trim();
+    const fecha = document.getElementById(`ed_fecha_${id}`).value;
+    const horaEntrega = document.getElementById(`ed_hora_${id}`).value.trim();
+    const cantidadPipeno = parseInt(document.getElementById(`ed_pipeno_${id}`).value || "0", 10);
+    const cantidadGranadina = parseInt(document.getElementById(`ed_granadina_${id}`).value || "0", 10);
+    const precioEspecialRaw = document.getElementById(`ed_precioespecial_${id}`).value;
+    const precioEspecial = precioEspecialRaw === "" ? NaN : parseInt(precioEspecialRaw, 10);
+    const envioGratis = document.getElementById(`ed_enviogratis_${id}`).checked;
+    const montoDespacho = envioGratis ? 0 : (parseInt(document.getElementById(`ed_despacho_${id}`).value || "0", 10));
+    const formaPago = document.getElementById(`ed_formapago_${id}`).value;
+    const observaciones = document.getElementById(`ed_obs_${id}`).value.trim();
+
+    if (!nombre_cliente || !telefono || !direccion || !numero || !comuna || !fecha) {
+      status.classList.add("error");
+      status.textContent = "Completa nombre, teléfono, dirección, número, comuna y fecha.";
+      return;
+    }
+
+    const regionKey = regionKeyFromLabel(p.region);
+    const tier = tierFor(regionKey, cantidadPipeno);
+    const precioUnitarioPipeno = (!isNaN(precioEspecial) && precioEspecial >= 0) ? precioEspecial : (tier ? tier.price : 0);
+    const subtotalPipeno = cantidadPipeno * precioUnitarioPipeno;
+    const subtotalGranadina = cantidadGranadina * GRANADINA_PRICE;
+    const subtotalExtras = (p.detalle_productos || []).reduce((s, l) => s + (l.subtotal || ((l.cantidad || 0) * (l.precio_unitario || 0))), 0);
+    const total = subtotalPipeno + subtotalGranadina + subtotalExtras + montoDespacho;
+
+    const payload = {
+      nombre_cliente, telefono, direccion, numero,
+      departamento: departamento || null,
+      comuna, fecha,
+      hora_entrega: horaEntrega || null,
+      cantidad_pipeno: cantidadPipeno,
+      precio_unitario_pipeno: precioUnitarioPipeno,
+      cantidad_granadina: cantidadGranadina,
+      envio_gratis: envioGratis,
+      forma_pago: formaPago,
+      observaciones: observaciones || null,
+      total,
+      necesita_atencion_vendedor: false,
+      motivo_rechazo: null
+    };
+
+    const { error } = await supa.from("pedidos").update(payload).eq("id", id);
+
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo guardar: " + error.message;
+      return;
+    }
+
+    status.classList.add("ok");
+    status.textContent = "Pedido actualizado.";
+    edicionAbiertaId = null;
+    await cargarMisPedidos();
+    await cargarAlertasAtencion();
   }
 
   async function descargarMisVentas() {
@@ -283,20 +1048,76 @@
     XLSX.writeFile(libro, nombreArchivo);
   }
 
-  async function descargarInformeSemanalPropio() {
+  // ==========================================================================
+  // ESTADÍSTICAS E INFORMES (diario / semanal / mensual)
+  // ==========================================================================
+  function onCambioTipoPeriodoInforme() {
+    const tipo = document.getElementById("informeTipoPeriodo").value;
+    document.getElementById("informeFechaVendedor").style.display = tipo === "mes" ? "none" : "block";
+    document.getElementById("informeMesVendedor").style.display = tipo === "mes" ? "block" : "none";
+    document.getElementById("informeFechaLabel").textContent =
+      tipo === "dia" ? "Día a informar" : tipo === "mes" ? "Mes a informar" : "Semana a informar (elige cualquier día de esa semana)";
+  }
+
+  function obtenerRangoInformeVendedor() {
+    const tipo = document.getElementById("informeTipoPeriodo").value;
+    if (tipo === "dia") {
+      return { rango: rangoDiaInforme(document.getElementById("informeFechaVendedor").value), titulo: "Informe diario de ventas" };
+    }
+    if (tipo === "mes") {
+      const mesVal = document.getElementById("informeMesVendedor").value;
+      return { rango: rangoMesInforme(mesVal ? mesVal + "-01" : null), titulo: "Informe mensual de ventas" };
+    }
+    return { rango: rangoSemanaInforme(document.getElementById("informeFechaVendedor").value), titulo: "Informe semanal de ventas" };
+  }
+
+  async function obtenerPedidosPeriodoVendedor() {
+    const { rango } = obtenerRangoInformeVendedor();
+    const { data, error } = await supa
+      .from("pedidos")
+      .select("id, fecha, nombre_cliente, comuna, cantidad_pipeno, cantidad_granadina, detalle_productos, forma_pago, total, estado")
+      .gte("fecha", rango.desde)
+      .lte("fecha", rango.hasta)
+      .order("fecha", { ascending: true });
+    return { data, error, desde: rango.desde, hasta: rango.hasta };
+  }
+
+  async function verMisEstadisticas() {
     const status = document.getElementById("informeStatusVendedor");
     status.className = "status-msg";
     status.textContent = "";
 
-    const fechaElegida = document.getElementById("informeFechaVendedor").value;
-    const { desde, hasta } = rangoSemanaInforme(fechaElegida);
+    const { data, error } = await obtenerPedidosPeriodoVendedor();
+    const wrap = document.getElementById("estadisticasVendedorWrap");
 
-    const { data, error } = await supa
-      .from("pedidos")
-      .select("id, fecha, nombre_cliente, comuna, cantidad_pipeno, cantidad_granadina, detalle_productos, forma_pago, total, estado")
-      .gte("fecha", desde)
-      .lte("fecha", hasta)
-      .order("fecha", { ascending: true });
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo cargar: " + error.message;
+      return;
+    }
+    if (!data || !data.length) {
+      wrap.innerHTML = '<p class="empty-state">Sin pedidos en este periodo.</p>';
+      return;
+    }
+
+    const s = calcularEstadisticasInforme(data);
+    wrap.innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-box"><span class="stat-num">${moneyInforme(s.totalEntregado)}</span><span class="stat-label">Vendido y entregado</span></div>
+        <div class="stat-box"><span class="stat-num">${s.entregados.length}</span><span class="stat-label">Pedidos entregados</span></div>
+        <div class="stat-box"><span class="stat-num">${moneyInforme(s.ticketPromedio)}</span><span class="stat-label">Ticket promedio</span></div>
+        <div class="stat-box"><span class="stat-num">${s.comunaTop || "-"}</span><span class="stat-label">Comuna donde más vendes</span></div>
+      </div>
+    `;
+  }
+
+  async function descargarInformePropio() {
+    const status = document.getElementById("informeStatusVendedor");
+    status.className = "status-msg";
+    status.textContent = "";
+
+    const { titulo } = obtenerRangoInformeVendedor();
+    const { data, error, desde, hasta } = await obtenerPedidosPeriodoVendedor();
 
     if (error) {
       status.classList.add("error");
@@ -309,148 +1130,9 @@
       return;
     }
 
-    generarInformeSemanalPDF({ pedidos: data, nombreVendedor: perfilActual.nombre_completo, desde, hasta });
+    generarInformeVentasPDF({ pedidos: data, nombreVendedor: perfilActual.nombre_completo, desde, hasta, tituloPeriodo: titulo });
     status.classList.add("ok");
-    status.textContent = `Informe descargado (semana ${desde} al ${hasta}).`;
-  }
-
-  function actualizarTotales() {
-    const regionKey = document.getElementById("region").value;
-    const cantidadPipeno = parseInt(document.getElementById("cantidadPipeno").value || "0", 10);
-    const cantidadGranadina = parseInt(document.getElementById("cantidadGranadina").value || "0", 10);
-    const montoDelivery = parseInt(document.getElementById("montoDelivery").value || "0", 10);
-    const region = PRICING[regionKey];
-
-    const resultado = calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPrecioDespacho: montoDelivery });
-
-    const tierInfo = document.getElementById("tierInfo");
-    if (cantidadPipeno > 0 && cantidadPipeno < region.min) {
-      tierInfo.style.color = "var(--rojo)";
-      tierInfo.textContent = `Pedido mínimo en ${region.label}: ${region.min} bidones.`;
-    } else if (resultado.tier) {
-      tierInfo.style.color = "#666";
-      tierInfo.textContent = `Precio unitario aplicado: ${money(resultado.precioUnitarioPipeno)} c/u`;
-    } else {
-      tierInfo.textContent = "";
-    }
-
-    document.getElementById("totalEstimado").textContent = money(resultado.total);
-    return resultado;
-  }
-
-  ["region", "cantidadPipeno", "cantidadGranadina", "montoDelivery"].forEach((id) => {
-    document.getElementById(id).addEventListener("input", actualizarTotales);
-    document.getElementById(id).addEventListener("change", actualizarTotales);
-  });
-  actualizarTotales();
-
-  async function guardarPedido() {
-    const status = document.getElementById("formStatus");
-    status.className = "status-msg";
-    status.textContent = "";
-
-    const regionKey = document.getElementById("region").value;
-    const region = PRICING[regionKey];
-    const nombreCliente = document.getElementById("nombreCliente").value.trim();
-    const telefono = document.getElementById("telefono").value.trim();
-    const direccion = document.getElementById("direccion").value.trim();
-    const numero = document.getElementById("numero").value.trim();
-    const departamento = document.getElementById("departamento").value.trim();
-    const comuna = document.getElementById("comuna").value.trim();
-    const observaciones = document.getElementById("observaciones").value.trim();
-    const formaPago = document.getElementById("formaPago").value;
-    const fechaPedido = document.getElementById("fechaPedido").value;
-    const montoDelivery = parseInt(document.getElementById("montoDelivery").value || "0", 10);
-    const cantidadPipeno = parseInt(document.getElementById("cantidadPipeno").value || "0", 10);
-    const cantidadGranadina = parseInt(document.getElementById("cantidadGranadina").value || "0", 10);
-
-    if (!nombreCliente || !telefono || !direccion || !numero || !comuna) {
-      status.classList.add("error");
-      status.textContent = "Completa nombre, teléfono, dirección, número y comuna.";
-      return;
-    }
-    if (cantidadPipeno === 0 && cantidadGranadina === 0) {
-      status.classList.add("error");
-      status.textContent = "Ingresa al menos una cantidad de Pipeño o Granadina.";
-      return;
-    }
-
-    const resultado = calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPrecioDespacho: montoDelivery });
-
-    const payload = {
-      nombre_cliente: nombreCliente,
-      telefono,
-      direccion,
-      numero,
-      departamento: departamento || null,
-      comuna,
-      region: region.label,
-      cantidad_pipeno: cantidadPipeno,
-      precio_unitario_pipeno: resultado.precioUnitarioPipeno,
-      cantidad_granadina: cantidadGranadina,
-      observaciones: observaciones || null,
-      forma_pago: formaPago,
-      total: resultado.total,
-      vendedor_id: perfilActual.id
-    };
-    if (fechaPedido) payload.fecha = fechaPedido;
-
-    const { error } = await supa.from("pedidos").insert(payload);
-
-    if (error) {
-      status.classList.add("error");
-      status.textContent = "No se pudo guardar el pedido: " + error.message;
-      return;
-    }
-
-    status.classList.add("ok");
-    status.textContent = "Pedido guardado correctamente.";
-    ["nombreCliente","telefono","direccion","numero","departamento","comuna","observaciones"].forEach(id => {
-      document.getElementById(id).value = "";
-    });
-    document.getElementById("cantidadPipeno").value = 0;
-    document.getElementById("cantidadGranadina").value = 0;
-    document.getElementById("montoDelivery").value = 0;
-    actualizarTotales();
-    cargarMisPedidos();
-  }
-
-  async function cargarMisPedidos() {
-    const wrap = document.getElementById("misPedidosWrap");
-    const { data, error } = await supa
-      .from("pedidos")
-      .select("id, fecha, nombre_cliente, comuna, dia_reparto, total, estado, creado_en")
-      .order("creado_en", { ascending: false })
-      .limit(50);
-
-    if (error) {
-      wrap.innerHTML = `<p class="empty-state">No se pudieron cargar tus pedidos.</p>`;
-      return;
-    }
-    if (!data || data.length === 0) {
-      wrap.innerHTML = `<p class="empty-state">Todavía no has ingresado pedidos.</p>`;
-      return;
-    }
-
-    const filas = data.map(p => `
-      <tr>
-        <td>${p.fecha}</td>
-        <td>${p.nombre_cliente}</td>
-        <td>${p.comuna}</td>
-        <td>${p.dia_reparto === "sin_asignar" ? "Sin ruta" : (p.dia_reparto || "-")}</td>
-        <td>${money(p.total)}</td>
-        <td><span class="badge badge-${p.estado}">${ESTADO_LABEL[p.estado] || p.estado}</span></td>
-      </tr>
-    `).join("");
-
-    wrap.innerHTML = `
-      <table class="orders">
-        <thead>
-          <tr><th>Fecha</th><th>Cliente</th><th>Comuna</th><th>Día ruta</th><th>Total</th><th>Estado</th></tr>
-        </thead>
-        <tbody>${filas}</tbody>
-      </table>
-    `;
+    status.textContent = `Informe descargado (${desde} al ${hasta}).`;
   }
 </script>
 
