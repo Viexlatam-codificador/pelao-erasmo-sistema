@@ -74,5 +74,11 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  // Se guarda también como referencia visible para el admin en su panel.
+  // Si esto falla no se revierte el cambio de contraseña (ya se aplicó en
+  // el login real) — solo se informa igual como éxito, la referencia se
+  // podrá corregir a mano si hiciera falta.
+  await supaAdmin.from("perfiles").update({ password_referencia: nuevaPassword }).eq("id", userId);
+
   res.status(200).json({ ok: true });
 };
