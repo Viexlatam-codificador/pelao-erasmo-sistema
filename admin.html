@@ -158,6 +158,28 @@
       <button type="button" class="btn btn-secondary" style="padding:8px 14px;font-size:.85rem;" onclick="cargarPedidosAdmin()">Buscar</button>
     </div>
 
+    <p style="font-size:.78rem;color:#888;margin:4px 0 6px;" id="totalesProductosTitulo"></p>
+    <div class="resumen-grid" id="totalesProductosWrap" style="margin-bottom:14px;"></div>
+
+    <div style="display:flex;gap:10px;margin-bottom:8px;">
+      <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="marcarTodosPedidosVisibles(true)">Marcar todos</button>
+      <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="marcarTodosPedidosVisibles(false)">Desmarcar todos</button>
+    </div>
+
+    <div class="lote-bar" id="lotePedidosBar" style="display:none;">
+      <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 8px;" id="lotePedidosTitulo">0 pedidos seleccionados</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1;min-width:160px;">
+          <label style="margin:0;">Nueva fecha de entrega</label>
+          <input type="date" id="lotePedidosFecha">
+        </div>
+        <button type="button" class="btn btn-primary" style="padding:9px 14px;font-size:.82rem;" onclick="aplicarFechaMasivaPedidos()">📅 Aplicar fecha a los seleccionados</button>
+        <button type="button" class="btn btn-secondary" style="padding:9px 14px;font-size:.82rem;" onclick="limpiarSeleccionPedidos()">Cancelar selección</button>
+      </div>
+      <p style="font-size:.75rem;color:#888;margin:6px 0 0;">Útil para pasar de una vez un grupo de pedidos pendientes a la fecha en que se van a despachar a la ruta.</p>
+      <p class="status-msg" id="lotePedidosStatus"></p>
+    </div>
+
     <div id="pedidosAdminWrap">
       <p class="empty-state">Cargando pedidos...</p>
     </div>
@@ -623,6 +645,7 @@
 <script src="assets/pricing.js"></script>
 <script src="assets/auth-guard.js"></script>
 <script src="assets/informes.js"></script>
+<script src="assets/deshacer.js"></script>
 <script src="assets/mapa-ruta.js"></script>
 <script>
   const DIAS = [
@@ -996,12 +1019,20 @@
 
   async function eliminarDiaEspecial(id) {
     if (!confirm("¿Eliminar este día especial?")) return;
+    const backup = diasEspecialesCache.find(x => x.id === id);
     const { error } = await supa.from("dias_especiales_reparto").delete().eq("id", id);
     if (error) {
       alert("No se pudo eliminar: " + error.message);
       return;
     }
     cargarDiasEspecialesAdmin();
+    if (backup) {
+      mostrarDeshacer("Día especial eliminado", async () => {
+        const { error: e2 } = await supa.from("dias_especiales_reparto").insert(backup);
+        if (e2) throw e2;
+        cargarDiasEspecialesAdmin();
+      });
+    }
   }
 
   // ==========================================================================
@@ -1151,10 +1182,18 @@
 
   async function eliminarTramo(id) {
     if (!confirm("¿Quitar este tramo de precio?")) return;
+    const backup = tramosCache.find(t => t.id === id);
     const { error } = await supa.from("producto_tramos").delete().eq("id", id);
     if (error) { alert("No se pudo quitar: " + error.message); return; }
     tramosCache = tramosCache.filter(t => t.id !== id);
     renderProductosAdmin();
+    if (backup) {
+      mostrarDeshacer("Tramo de precio eliminado", async () => {
+        const { error: e2 } = await supa.from("producto_tramos").insert(backup);
+        if (e2) throw e2;
+        cargarProductosAdmin();
+      });
+    }
   }
 
   async function guardarCambiosProductos() {
@@ -1207,13 +1246,21 @@
   async function eliminarProducto(id) {
     const p = productosCache.find(x => x.id === id);
     const nombre = p ? p.nombre : "este producto";
-    if (!confirm(`¿Eliminar "${nombre}"? Esto no se puede deshacer. Si prefieres solo ocultarlo temporalmente, usa el interruptor "Activo" en vez de eliminar.`)) return;
+    if (!confirm(`¿Eliminar "${nombre}"? Vas a poder deshacerlo por unos segundos después de borrarlo. Si prefieres solo ocultarlo temporalmente, usa el interruptor "Activo" en vez de eliminar.`)) return;
+    const backup = p;
     const { error } = await supa.from("productos").delete().eq("id", id);
     if (error) {
       alert("No se pudo eliminar: " + error.message);
       return;
     }
     cargarProductosAdmin();
+    if (backup) {
+      mostrarDeshacer(`Producto "${nombre}" eliminado`, async () => {
+        const { error: e2 } = await supa.from("productos").insert(backup);
+        if (e2) throw e2;
+        cargarProductosAdmin();
+      });
+    }
   }
 
   function onCambioTipoNuevoProducto() {
@@ -1503,6 +1550,9 @@
   let pedidosCache = [];
   let pedidoExpandidoId = null;
   const pedidoHistorialCache = {};
+  // Selección múltiple de pedidos, para poder cambiarles la fecha de
+  // despacho a todos de una vez (por ejemplo antes de generar la ruta).
+  const pedidosSeleccionados = new Set();
   // Estado de edición de productos/despacho del pedido abierto actualmente
   // (se arma la primera vez que se abre el detalle, y se mantiene mientras
   // esté abierto para poder agregar/quitar líneas sin perder lo ya tocado).
@@ -1615,7 +1665,124 @@
     }
 
     pedidosCache = data || [];
+    // Cada vez que se recarga (cambió el filtro, o se guardó algo), se
+    // limpia la selección — mantener marcados ids que ya no están a la
+    // vista sería confuso.
+    pedidosSeleccionados.clear();
     renderPedidosAdmin();
+  }
+
+  // Cuánto hay en total de cada producto entre los pedidos que están a la
+  // vista ahora mismo (respeta los filtros aplicados) — para saber de un
+  // vistazo cuánto preparar, sin tener que abrir pedido por pedido. No
+  // cuenta lo anulado ni lo rechazado, porque eso no se va a despachar.
+  function calcularTotalesProductosAdmin(pedidos) {
+    const totales = {};
+    const sumar = (nombre, cantidad) => {
+      if (!nombre || !cantidad) return;
+      totales[nombre] = (totales[nombre] || 0) + Number(cantidad);
+    };
+    pedidos
+      .filter(p => p.estado !== "anulado" && p.estado !== "rechazado")
+      .forEach(p => {
+        sumar(PIPENO5L_NOMBRE_ADMIN, p.cantidad_pipeno);
+        sumar("Granadina", p.cantidad_granadina);
+        (p.detalle_productos || []).forEach(l => {
+          if (l.nombre && !/pipe.o 5|granadina/i.test(l.nombre)) sumar(l.nombre, l.cantidad);
+        });
+      });
+    return totales;
+  }
+
+  function renderTotalesProductosAdmin() {
+    const wrap = document.getElementById("totalesProductosWrap");
+    const titulo = document.getElementById("totalesProductosTitulo");
+    const totales = calcularTotalesProductosAdmin(pedidosCache);
+    const entradas = Object.entries(totales).sort((a, b) => b[1] - a[1]);
+
+    if (!entradas.length) {
+      wrap.innerHTML = "";
+      titulo.textContent = "";
+      return;
+    }
+
+    titulo.textContent = "Total de productos entre los pedidos que se ven ahora (sin anulados ni rechazados):";
+    wrap.innerHTML = entradas.map(([nombre, cantidad]) => `
+      <div class="resumen-card"><div class="num">${cantidad}</div><div class="lbl">${nombre}</div></div>
+    `).join("");
+  }
+
+  // ==========================================================================
+  // Selección múltiple de pedidos + cambio de fecha en lote
+  // ==========================================================================
+  function toggleSeleccionPedidoAdmin(id, checked) {
+    if (checked) pedidosSeleccionados.add(id); else pedidosSeleccionados.delete(id);
+    actualizarBarraLotePedidos();
+  }
+
+  function marcarTodosPedidosVisibles(marcar) {
+    if (marcar) pedidosCache.forEach(p => pedidosSeleccionados.add(p.id));
+    else pedidosSeleccionados.clear();
+    renderPedidosAdmin();
+  }
+
+  function limpiarSeleccionPedidos() {
+    pedidosSeleccionados.clear();
+    renderPedidosAdmin();
+  }
+
+  function actualizarBarraLotePedidos() {
+    const barra = document.getElementById("lotePedidosBar");
+    const titulo = document.getElementById("lotePedidosTitulo");
+    if (pedidosSeleccionados.size === 0) {
+      barra.style.display = "none";
+      return;
+    }
+    barra.style.display = "block";
+    titulo.textContent = `${pedidosSeleccionados.size} pedido${pedidosSeleccionados.size === 1 ? "" : "s"} seleccionado${pedidosSeleccionados.size === 1 ? "" : "s"}`;
+  }
+
+  async function aplicarFechaMasivaPedidos() {
+    const status = document.getElementById("lotePedidosStatus");
+    status.className = "status-msg";
+    const nuevaFecha = document.getElementById("lotePedidosFecha").value;
+
+    if (!nuevaFecha) {
+      status.classList.add("error");
+      status.textContent = "Elige primero la nueva fecha.";
+      return;
+    }
+    if (pedidosSeleccionados.size === 0) return;
+
+    status.textContent = "Aplicando...";
+    const ids = Array.from(pedidosSeleccionados);
+    const fechasAnteriores = ids.map(id => {
+      const p = pedidosCache.find(x => x.id === id);
+      return { id, fecha: p ? p.fecha : null };
+    }).filter(x => x.fecha);
+
+    const { error } = await supa.from("pedidos").update({ fecha: nuevaFecha }).in("id", ids);
+
+    if (error) {
+      status.classList.add("error");
+      status.textContent = "No se pudo aplicar el cambio: " + error.message;
+      return;
+    }
+
+    pedidosSeleccionados.clear();
+    await cargarPedidosAdmin();
+    cargarResumenPedidos();
+
+    if (fechasAnteriores.length) {
+      mostrarDeshacer(`Fecha aplicada a ${fechasAnteriores.length} pedido${fechasAnteriores.length === 1 ? "" : "s"}`, async () => {
+        for (const item of fechasAnteriores) {
+          const { error: e2 } = await supa.from("pedidos").update({ fecha: item.fecha }).eq("id", item.id);
+          if (e2) throw e2;
+        }
+        await cargarPedidosAdmin();
+        cargarResumenPedidos();
+      }, 10);
+    }
   }
 
   function nombreOtrosProductos(p) {
@@ -1637,6 +1804,9 @@
     const wrap = document.getElementById("pedidosAdminWrap");
     const resumenTexto = document.getElementById("pedidosResumenTexto");
 
+    renderTotalesProductosAdmin();
+    actualizarBarraLotePedidos();
+
     if (pedidosCache.length === 0) {
       wrap.innerHTML = `<p class="empty-state">No hay pedidos que coincidan con el filtro.</p>`;
       resumenTexto.textContent = "";
@@ -1651,6 +1821,7 @@
       const hora = p.creado_en ? new Date(p.creado_en).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }) : "-";
       return `
         <tr data-pedido-id="${p.id}">
+          <td><input type="checkbox" ${pedidosSeleccionados.has(p.id) ? "checked" : ""} onchange="toggleSeleccionPedidoAdmin('${p.id}', this.checked)"></td>
           <td>
             <input type="date" value="${p.fecha}" style="width:132px;" onchange="cambiarFechaPedido('${p.id}', this.value)">
             <div style="font-size:.72rem;color:#888;margin-top:2px;">${hora} h · ${p.dia_reparto === "sin_asignar" ? "Sin ruta" : (p.dia_reparto || "-")}</div>
@@ -1660,6 +1831,7 @@
           <td>${nombreVendedor}</td>
           <td style="font-size:.78rem;">${p.forma_pago}</td>
           <td style="font-weight:700;">${money(p.total)}</td>
+          <td style="font-size:.76rem;color:#666;max-width:150px;">${nombreOtrosProductos(p).join(" · ") || "-"}</td>
           <td>
             <select onchange="cambiarEstadoPedido('${p.id}', this.value)">
               ${Object.keys(ESTADO_LABEL).map(e => `<option value="${e}" ${e === p.estado ? "selected" : ""}>${ESTADO_LABEL[e]}</option>`).join("")}
@@ -1683,7 +1855,7 @@
           <div class="region-contenido">
             <table class="orders comunas pedidos-tabla">
               <thead>
-                <tr><th>Fecha / hora / ruta</th><th>Cliente</th><th>Comuna</th><th>Vendedor</th><th>Pago</th><th>Total</th><th>Estado</th><th></th></tr>
+                <tr><th style="width:30px;"></th><th>Fecha / hora / ruta</th><th>Cliente</th><th>Comuna</th><th>Vendedor</th><th>Pago</th><th>Total</th><th>Productos</th><th>Estado</th><th></th></tr>
               </thead>
               <tbody>${pedidosRegion.map(filaHtml).join("")}</tbody>
             </table>
@@ -1839,25 +2011,48 @@
   }
 
   async function cambiarEstadoPedido(id, nuevoEstado) {
+    const p = pedidosCache.find(x => x.id === id);
+    const estadoAnterior = p ? p.estado : null;
     const { error } = await supa.from("pedidos").update({ estado: nuevoEstado }).eq("id", id);
     if (error) {
       alert("No se pudo cambiar el estado: " + error.message);
       cargarPedidosAdmin();
       return;
     }
-    const p = pedidosCache.find(x => x.id === id);
     if (p) p.estado = nuevoEstado;
     delete pedidoHistorialCache[id]; // se recarga si vuelve a abrir el historial
     cargarResumenPedidos();
+    if (estadoAnterior && estadoAnterior !== nuevoEstado) {
+      mostrarDeshacer(`Estado cambiado a "${ESTADO_LABEL[nuevoEstado] || nuevoEstado}"`, async () => {
+        const { error: e2 } = await supa.from("pedidos").update({ estado: estadoAnterior }).eq("id", id);
+        if (e2) throw e2;
+        const p2 = pedidosCache.find(x => x.id === id);
+        if (p2) p2.estado = estadoAnterior;
+        delete pedidoHistorialCache[id];
+        renderPedidosAdmin();
+        cargarResumenPedidos();
+      });
+    }
   }
 
   async function cambiarFechaPedido(id, nuevaFecha) {
     if (!nuevaFecha) return;
+    const p = pedidosCache.find(x => x.id === id);
+    const fechaAnterior = p ? p.fecha : null;
     const { error } = await supa.from("pedidos").update({ fecha: nuevaFecha }).eq("id", id);
     if (error) { alert("No se pudo cambiar la fecha: " + error.message); cargarPedidosAdmin(); return; }
-    const p = pedidosCache.find(x => x.id === id);
     if (p) p.fecha = nuevaFecha;
     cargarResumenPedidos();
+    if (fechaAnterior && fechaAnterior !== nuevaFecha) {
+      mostrarDeshacer("Fecha del pedido cambiada", async () => {
+        const { error: e2 } = await supa.from("pedidos").update({ fecha: fechaAnterior }).eq("id", id);
+        if (e2) throw e2;
+        const p2 = pedidosCache.find(x => x.id === id);
+        if (p2) p2.fecha = fechaAnterior;
+        renderPedidosAdmin();
+        cargarResumenPedidos();
+      });
+    }
   }
 
   async function guardarEdicionPedido(id) {
@@ -1908,6 +2103,10 @@
       return;
     }
 
+    const pedidoAnterior = pedidosCache.find(x => x.id === id);
+    const valoresAnteriores = pedidoAnterior ? {} : null;
+    if (pedidoAnterior) Object.keys(payload).forEach(k => { valoresAnteriores[k] = pedidoAnterior[k]; });
+
     const { error } = await supa.from("pedidos").update(payload).eq("id", id);
     if (error) {
       status.classList.add("error");
@@ -1922,10 +2121,18 @@
     delete edicionProductosCache[id];
     delete edicionDespachoCache[id];
     cargarPedidosAdmin();
+    if (valoresAnteriores) {
+      mostrarDeshacer("Pedido actualizado", async () => {
+        const { error: e2 } = await supa.from("pedidos").update(valoresAnteriores).eq("id", id);
+        if (e2) throw e2;
+        cargarPedidosAdmin();
+      });
+    }
   }
 
   async function eliminarPedido(id) {
-    if (!confirm("¿Eliminar este pedido? Esta acción no se puede deshacer.")) return;
+    if (!confirm("¿Eliminar este pedido? Vas a poder deshacerlo por unos segundos después de borrarlo.")) return;
+    const pedidoBackup = pedidosCache.find(x => x.id === id);
     const { error } = await supa.from("pedidos").delete().eq("id", id);
     if (error) {
       alert("No se pudo eliminar: " + error.message);
@@ -1936,6 +2143,14 @@
     if (pedidoExpandidoId === id) cerrarModalPedido();
     cargarPedidosAdmin();
     cargarResumenPedidos();
+    if (pedidoBackup) {
+      mostrarDeshacer("Pedido eliminado", async () => {
+        const { error: e2 } = await supa.rpc("restaurar_pedido_eliminado", { p_datos: pedidoBackup });
+        if (e2) throw e2;
+        cargarPedidosAdmin();
+        cargarResumenPedidos();
+      }, 10);
+    }
   }
 
   // ==========================================================================
