@@ -132,7 +132,8 @@ module.exports = async function handler(req, res) {
     nombre_completo: nombreCompleto,
     telefono_whatsapp: telefonoWhatsapp,
     rol,
-    activo: true
+    activo: true,
+    password_referencia: password
   });
 
   if (perfilInsertError) {
