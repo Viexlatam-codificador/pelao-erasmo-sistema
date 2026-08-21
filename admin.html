@@ -1638,7 +1638,7 @@
     // se reconstruye la línea a partir de las columnas sueltas que sí tienen.
     if (!lineas.length) {
       if (p.cantidad_pipeno > 0) lineas.push({ nombre: "Pipeño 5 Litros", unidad: "bidón", cantidad: p.cantidad_pipeno, precio_unitario: p.precio_unitario_pipeno || 0 });
-      if (p.cantidad_granadina > 0) lineas.push({ nombre: "Granadina 700cc", unidad: "display", cantidad: p.cantidad_granadina, precio_unitario: 0 });
+      if (p.cantidad_granadina > 0) lineas.push({ nombre: "Granadina 700cc", unidad: "display", cantidad: p.cantidad_granadina, precio_unitario: p.precio_unitario_granadina || 0 });
     }
     edicionProductosCache[p.id] = lineas;
     const subtotalOriginal = lineas.reduce((a, l) => a + l.cantidad * l.precio_unitario, 0);
@@ -1693,7 +1693,7 @@
 
     let query = supa
       .from("pedidos")
-      .select("id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, precio_unitario_pipeno, cantidad_granadina, detalle_productos, observaciones, forma_pago, total, estado, dia_reparto, vendedor_id, necesita_atencion_vendedor, motivo_rechazo, hora_entrega, envio_gratis")
+      .select("id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, precio_unitario_pipeno, cantidad_granadina, precio_unitario_granadina, detalle_productos, observaciones, forma_pago, total, estado, dia_reparto, vendedor_id, necesita_atencion_vendedor, motivo_rechazo, hora_entrega, envio_gratis")
       .order("creado_en", { ascending: false })
       .limit(300);
 
@@ -2158,6 +2158,7 @@
       cantidad_pipeno: lineaPipeno ? lineaPipeno.cantidad : 0,
       precio_unitario_pipeno: lineaPipeno ? lineaPipeno.precio_unitario : 0,
       cantidad_granadina: lineaGranadina ? lineaGranadina.cantidad : 0,
+      precio_unitario_granadina: lineaGranadina ? lineaGranadina.precio_unitario : 0,
       detalle_productos: lineasValidas,
       total: subtotalProductos + despacho,
       necesita_atencion_vendedor: false,
