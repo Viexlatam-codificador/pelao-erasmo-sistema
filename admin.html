@@ -72,6 +72,37 @@
     width:30px; height:30px; font-size:1rem; cursor:pointer; color:#555; line-height:1;
   }
   .icono-atencion-pedido{ color:var(--rojo); font-size:.9rem; margin-left:4px; }
+
+  /* Historial de entregas (Pedidos): calendario semanal, mismo lenguaje
+     visual que el de reparto.html — aquí muestra TODOS los vendedores. */
+  .calendario-nav{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .calendario-nav-btn{
+    background:#eee; border:none; border-radius:8px; width:36px; height:36px;
+    font-size:1rem; cursor:pointer; color:var(--verde-oscuro); font-weight:800;
+  }
+  .calendario-nav-rango{ font-weight:700; font-size:.85rem; color:var(--verde-oscuro); text-align:center; flex:1; text-transform:capitalize; }
+  .calendario-hoy-btn{
+    display:block; margin:0 auto 10px; background:none; border:1px solid var(--verde); color:var(--verde-oscuro);
+    border-radius:16px; padding:5px 14px; font-size:.76rem; font-weight:700; cursor:pointer;
+  }
+  .calendario-semana{ display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; -webkit-overflow-scrolling:touch; }
+  .calendario-dia{
+    flex:0 0 auto; width:84px; text-align:center; background:#f8f7f2; border:1.5px solid #eee;
+    border-radius:12px; padding:8px 4px; cursor:pointer;
+  }
+  .calendario-dia.activo{ border-color:var(--verde-oscuro); background:#eef6ec; }
+  .calendario-dia.hoy .calendario-dia-num{ color:var(--rojo); }
+  .calendario-dia-nombre{ font-size:.66rem; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:.3px; }
+  .calendario-dia-num{ font-size:1.1rem; font-weight:800; color:#333; margin:2px 0 6px; }
+  .calendario-dia-entregados{ font-size:.76rem; font-weight:800; color:var(--verde-oscuro); }
+  .calendario-dia-monto{ font-size:.66rem; color:#888; margin-top:2px; }
+  .calendario-dia-rechazados{ font-size:.66rem; color:var(--rojo); font-weight:700; margin-top:2px; }
+  .calendario-dia-vacio{ font-size:.72rem; color:#bbb; margin-top:12px; }
+  .calendario-detalle-item{
+    display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
+    background:#fff; border:1px solid #eee; border-radius:10px; padding:9px 12px; margin-bottom:8px; font-size:.85rem;
+  }
+  .calendario-detalle-item:last-child{ margin-bottom:0; }
 </style>
 </head>
 <body>
@@ -184,6 +215,26 @@
       <p class="empty-state">Cargando pedidos...</p>
     </div>
     <p style="font-size:.78rem;color:#888;margin-top:8px;" id="pedidosResumenTexto"></p>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+      Historial de entregas
+    </h2>
+    <p style="font-size:.85rem;color:#666;margin:0 0 10px;">
+      Los pedidos entregados (y rechazados) quedan ordenados acá por semana,
+      de todos los vendedores, para no perderlos entre los pedidos activos.
+      Toca un día para ver el detalle.
+    </p>
+    <div class="calendario-nav">
+      <button type="button" class="calendario-nav-btn" onclick="cambiarSemanaCalendarioAdmin(-1)">◀</button>
+      <span class="calendario-nav-rango" id="calendarioAdminRangoTexto">Cargando semana...</span>
+      <button type="button" class="calendario-nav-btn" onclick="cambiarSemanaCalendarioAdmin(1)">▶</button>
+    </div>
+    <button type="button" class="calendario-hoy-btn" onclick="irSemanaActualCalendarioAdmin()">Ir a esta semana</button>
+    <div class="calendario-semana" id="calendarioAdminSemanaWrap"></div>
+    <div id="calendarioAdminDetalleWrap" style="margin-top:14px;"></div>
   </section>
 
   <section class="card">
@@ -693,6 +744,7 @@
     await cargarVendedoresAdmin();
     cargarPedidosAdmin();
     cargarRepartidoresAdmin();
+    cargarCalendarioSemanaAdmin();
   });
 
   document.getElementById("filtroComuna").addEventListener("input", renderComunas);
@@ -2154,6 +2206,142 @@
   }
 
   // ==========================================================================
+  // HISTORIAL DE ENTREGAS (calendario semanal — todos los vendedores)
+  // ==========================================================================
+  function lunesDeEstaSemanaCalendarioAdmin(fecha) {
+    const d = new Date(fecha);
+    const dia = d.getDay();
+    const offset = dia === 0 ? -6 : 1 - dia;
+    d.setDate(d.getDate() + offset);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function formatoFechaCalendarioAdmin(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  let calendarioAdminSemanaInicio = lunesDeEstaSemanaCalendarioAdmin(new Date());
+  let calendarioAdminCache = [];
+  let calendarioAdminDiaSeleccionado = null;
+
+  function cambiarSemanaCalendarioAdmin(delta) {
+    calendarioAdminSemanaInicio.setDate(calendarioAdminSemanaInicio.getDate() + delta * 7);
+    calendarioAdminDiaSeleccionado = null;
+    cargarCalendarioSemanaAdmin();
+  }
+
+  function irSemanaActualCalendarioAdmin() {
+    calendarioAdminSemanaInicio = lunesDeEstaSemanaCalendarioAdmin(new Date());
+    calendarioAdminDiaSeleccionado = null;
+    cargarCalendarioSemanaAdmin();
+  }
+
+  async function cargarCalendarioSemanaAdmin() {
+    const inicio = new Date(calendarioAdminSemanaInicio);
+    const fin = new Date(calendarioAdminSemanaInicio);
+    fin.setDate(fin.getDate() + 6);
+    const desde = formatoFechaCalendarioAdmin(inicio);
+    const hasta = formatoFechaCalendarioAdmin(fin);
+
+    const rango = document.getElementById("calendarioAdminRangoTexto");
+    if (rango) {
+      rango.textContent =
+        `${inicio.toLocaleDateString("es-CL", { day: "numeric", month: "short" })} — ${fin.toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}`;
+    }
+
+    const { data, error } = await supa
+      .from("pedidos")
+      .select("id, fecha, nombre_cliente, comuna, total, estado, motivo_rechazo, hora_entrega, vendedor_id")
+      .in("estado", ["entregado", "rechazado"])
+      .gte("fecha", desde)
+      .lte("fecha", hasta);
+
+    calendarioAdminCache = error ? [] : (data || []);
+    renderCalendarioSemanaAdmin();
+  }
+
+  function renderCalendarioSemanaAdmin() {
+    const wrap = document.getElementById("calendarioAdminSemanaWrap");
+    if (!wrap) return;
+    const hoyStr = new Date().toISOString().slice(0, 10);
+    const nombresDia = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+    const dias = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(calendarioAdminSemanaInicio);
+      d.setDate(d.getDate() + i);
+      dias.push(d);
+    }
+
+    wrap.innerHTML = dias.map((d, i) => {
+      const fechaStr = formatoFechaCalendarioAdmin(d);
+      const pedidosDia = calendarioAdminCache.filter(p => p.fecha === fechaStr);
+      const entregados = pedidosDia.filter(p => p.estado === "entregado");
+      const rechazados = pedidosDia.filter(p => p.estado === "rechazado");
+      const montoTotal = entregados.reduce((s, p) => s + (p.total || 0), 0);
+      const esHoy = fechaStr === hoyStr;
+      const activo = fechaStr === calendarioAdminDiaSeleccionado;
+      return `
+        <div class="calendario-dia ${esHoy ? "hoy" : ""} ${activo ? "activo" : ""}" onclick="seleccionarDiaCalendarioAdmin('${fechaStr}')">
+          <div class="calendario-dia-nombre">${nombresDia[i]}</div>
+          <div class="calendario-dia-num">${d.getDate()}</div>
+          ${pedidosDia.length ? `
+            <div class="calendario-dia-entregados">✅ ${entregados.length}</div>
+            ${montoTotal ? `<div class="calendario-dia-monto">${money(montoTotal)}</div>` : ""}
+            ${rechazados.length ? `<div class="calendario-dia-rechazados">❌ ${rechazados.length}</div>` : ""}
+          ` : `<div class="calendario-dia-vacio">—</div>`}
+        </div>
+      `;
+    }).join("");
+
+    if (calendarioAdminDiaSeleccionado) renderDetalleDiaCalendarioAdmin();
+  }
+
+  function seleccionarDiaCalendarioAdmin(fechaStr) {
+    calendarioAdminDiaSeleccionado = calendarioAdminDiaSeleccionado === fechaStr ? null : fechaStr;
+    renderCalendarioSemanaAdmin();
+    renderDetalleDiaCalendarioAdmin();
+  }
+
+  function renderDetalleDiaCalendarioAdmin() {
+    const wrap = document.getElementById("calendarioAdminDetalleWrap");
+    if (!wrap) return;
+    if (!calendarioAdminDiaSeleccionado) { wrap.innerHTML = ""; return; }
+
+    const pedidosDia = calendarioAdminCache
+      .filter(p => p.fecha === calendarioAdminDiaSeleccionado)
+      .sort((a, b) => (a.nombre_cliente || "").localeCompare(b.nombre_cliente || "", "es"));
+
+    if (!pedidosDia.length) {
+      wrap.innerHTML = `<p class="empty-state">Sin entregas ese día.</p>`;
+      return;
+    }
+
+    const fechaLegible = new Date(calendarioAdminDiaSeleccionado + "T12:00:00")
+      .toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+
+    wrap.innerHTML = `
+      <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 8px;text-transform:capitalize;">${fechaLegible}</p>
+      ${pedidosDia.map(p => {
+        const vendedor = vendedoresCache.find(v => v.id === p.vendedor_id);
+        const nombreVendedor = vendedor ? vendedor.nombre_completo : (p.vendedor_id ? "" : "Venta orgánica");
+        return `
+        <div class="calendario-detalle-item">
+          <div>
+            <strong>${p.nombre_cliente}</strong> · ${p.comuna}
+            <span class="badge badge-${p.estado}" style="margin-left:6px;">${ESTADO_LABEL[p.estado] || p.estado}</span>
+            ${nombreVendedor ? `<div style="font-size:.72rem;color:#888;margin-top:2px;">Vendedor: ${nombreVendedor}</div>` : ""}
+            ${p.motivo_rechazo ? `<div style="font-size:.72rem;color:#886;margin-top:2px;">📝 ${p.motivo_rechazo}</div>` : ""}
+          </div>
+          <div style="font-weight:800;color:var(--verde-oscuro);white-space:nowrap;">${money(p.total)}</div>
+        </div>
+      `;
+      }).join("")}
+    `;
+  }
+
+  // ==========================================================================
   // GENERAR RUTA + EXPORTAR EXCEL
   // ==========================================================================
   let rutaActual = [];
@@ -2492,7 +2680,7 @@
   async function cargarVendedoresAdmin() {
     const { data, error } = await supa
       .from("perfiles")
-      .select("id, username, nombre_completo, telefono_whatsapp, rol, activo")
+      .select("id, username, nombre_completo, telefono_whatsapp, rol, activo, password_referencia")
       .eq("rol", "vendedor")
       .order("nombre_completo", { ascending: true });
 
@@ -2543,25 +2731,185 @@
           <input type="tel" value="${(v.telefono_whatsapp || "").replace(/"/g, "&quot;")}" placeholder="+56 9 xxxx xxxx"
             onchange="marcarCambioVendedor('${v.id}','telefono_whatsapp', this.value)">
         </td>
+        <td>${celdaPasswordReferencia(v)}</td>
         <td>
           <label class="toggle-disponible">
             <input type="checkbox" ${v.activo ? "checked" : ""} onchange="toggleActivoVendedor('${v.id}', this.checked)">
             ${v.activo ? "Activo" : "Bloqueado"}
           </label>
         </td>
-        <td>
+        <td style="white-space:nowrap;">
           <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem;"
             onclick="generarInformeVendedorAdmin('${v.id}', '${(v.nombre_completo || "").replace(/'/g, "\\'").replace(/"/g, "&quot;")}')">📄 PDF</button>
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem;"
+            onclick="restablecerPasswordPerfil('vendedor', '${v.id}', '${(v.nombre_completo || "").replace(/'/g, "\\'").replace(/"/g, "&quot;")}')">🔑 Restablecer</button>
+          <button type="button" class="btn btn-primary" style="padding:6px 10px;font-size:.78rem;"
+            onclick="eliminarPerfilVendedorRepartidor('vendedor', '${v.id}', '${(v.nombre_completo || "").replace(/'/g, "\\'").replace(/"/g, "&quot;")}')">🗑️ Eliminar</button>
         </td>
       </tr>
     `).join("");
 
     wrap.innerHTML = `
       <table class="orders comunas">
-        <thead><tr><th>Vendedor</th><th>WhatsApp</th><th>Estado</th><th>Informe</th></tr></thead>
+        <thead><tr><th>Vendedor</th><th>WhatsApp</th><th>Contraseña</th><th>Estado</th><th>Acciones</th></tr></thead>
         <tbody>${filas}</tbody>
       </table>
     `;
+  }
+
+  // Celda compartida (vendedor/repartidor) que muestra la última contraseña
+  // provisoria conocida, oculta por defecto, con botones para mostrar/ocultar
+  // y copiar — así el admin siempre la tiene a mano en su propia pantalla.
+  const passwordsVisiblesAdmin = new Set();
+
+  function celdaPasswordReferencia(p) {
+    if (!p.password_referencia) {
+      return `<span style="font-size:.75rem;color:#999;">Sin registro — usa "Restablecer"</span>`;
+    }
+    const visible = passwordsVisiblesAdmin.has(p.id);
+    const valorMostrado = visible ? p.password_referencia : "••••••••";
+    return `
+      <div style="display:flex;align-items:center;gap:6px;">
+        <code style="font-size:.85rem;background:#f6f5f0;padding:3px 7px;border-radius:6px;">${valorMostrado.replace(/</g, "&lt;")}</code>
+        <button type="button" title="${visible ? "Ocultar" : "Mostrar"}" style="border:none;background:none;cursor:pointer;font-size:.95rem;"
+          onclick="togglePasswordVisiblePerfil('${p.id}')">${visible ? "🙈" : "👁️"}</button>
+        <button type="button" title="Copiar" style="border:none;background:none;cursor:pointer;font-size:.95rem;"
+          onclick="copiarPasswordPerfil('${p.password_referencia.replace(/'/g, "\\'")}', this)">📋</button>
+      </div>
+    `;
+  }
+
+  function togglePasswordVisiblePerfil(id) {
+    if (passwordsVisiblesAdmin.has(id)) passwordsVisiblesAdmin.delete(id);
+    else passwordsVisiblesAdmin.add(id);
+    renderVendedoresAdmin();
+    renderRepartidoresAdmin();
+  }
+
+  function copiarPasswordPerfil(password, btnEl) {
+    navigator.clipboard.writeText(password).then(() => {
+      const original = btnEl.textContent;
+      btnEl.textContent = "✔️";
+      setTimeout(() => { btnEl.textContent = original; }, 1500);
+    }).catch(() => {
+      alert("No se pudo copiar. La contraseña es: " + password);
+    });
+  }
+
+  function generarPasswordAleatoria() {
+    const alfabeto = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+    let out = "";
+    for (let i = 0; i < 8; i++) out += alfabeto[Math.floor(Math.random() * alfabeto.length)];
+    return out;
+  }
+
+  async function restablecerPasswordPerfil(tipo, id, nombre) {
+    const sugerida = generarPasswordAleatoria();
+    const nueva = prompt(`Nueva contraseña provisoria para ${nombre} (mínimo 6 caracteres).\nPuedes usar esta sugerida o escribir otra:`, sugerida);
+    if (!nueva) return;
+    if (nueva.length < 6) {
+      alert("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+
+    const cache = tipo === "vendedor" ? vendedoresCache : repartidoresCache;
+    const status = document.getElementById(tipo === "vendedor" ? "vendedoresStatus" : "repartidoresStatus");
+    const anterior = cache.find(x => x.id === id);
+    const passwordAnterior = anterior ? anterior.password_referencia : null;
+
+    const { data: sessionData } = await supa.auth.getSession();
+    const token = sessionData && sessionData.session ? sessionData.session.access_token : null;
+    if (!token) { alert("Tu sesión expiró, vuelve a iniciar sesión."); return; }
+
+    try {
+      const resp = await fetch("/api/admin-reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ userId: id, nuevaPassword: nueva })
+      });
+      const resultado = await resp.json();
+      if (!resp.ok) {
+        alert(resultado.error || "No se pudo restablecer la contraseña.");
+        return;
+      }
+      if (anterior) anterior.password_referencia = nueva;
+      passwordsVisiblesAdmin.add(id);
+      renderVendedoresAdmin();
+      renderRepartidoresAdmin();
+      if (status) {
+        status.className = "status-msg ok";
+        status.textContent = `Contraseña de ${nombre} actualizada.`;
+      }
+      mostrarDeshacer(`Contraseña de ${nombre} cambiada`, async () => {
+        if (!passwordAnterior) { alert("No hay una contraseña anterior registrada para restaurar."); return; }
+        const { data: sd2 } = await supa.auth.getSession();
+        const token2 = sd2 && sd2.session ? sd2.session.access_token : null;
+        const resp2 = await fetch("/api/admin-reset-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token2 },
+          body: JSON.stringify({ userId: id, nuevaPassword: passwordAnterior })
+        });
+        if (!resp2.ok) throw new Error("No se pudo deshacer el cambio de contraseña.");
+        if (anterior) anterior.password_referencia = passwordAnterior;
+        renderVendedoresAdmin();
+        renderRepartidoresAdmin();
+      });
+    } catch (e) {
+      alert("No se pudo conectar con el servidor.");
+    }
+  }
+
+  async function eliminarPerfilVendedorRepartidor(tipo, id, nombre) {
+    if (!confirm(`¿Eliminar definitivamente a "${nombre}"? Se borra su cuenta de acceso. Vas a poder deshacerlo por unos segundos después de eliminarlo.`)) return;
+
+    const cache = tipo === "vendedor" ? vendedoresCache : repartidoresCache;
+    const backup = cache.find(x => x.id === id);
+
+    const { data: sessionData } = await supa.auth.getSession();
+    const token = sessionData && sessionData.session ? sessionData.session.access_token : null;
+    if (!token) { alert("Tu sesión expiró, vuelve a iniciar sesión."); return; }
+
+    try {
+      const resp = await fetch("/api/eliminar-usuario", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ userId: id })
+      });
+      const resultado = await resp.json();
+      if (!resp.ok) {
+        alert(resultado.error || "No se pudo eliminar.");
+        return;
+      }
+
+      if (tipo === "vendedor") await cargarVendedoresAdmin(); else await cargarRepartidoresAdmin();
+
+      if (backup) {
+        mostrarDeshacer(`${tipo === "vendedor" ? "Vendedor" : "Repartidor"} "${nombre}" eliminado`, async () => {
+          const passwordRestaurar = backup.password_referencia || generarPasswordAleatoria();
+          const { data: sd2 } = await supa.auth.getSession();
+          const token2 = sd2 && sd2.session ? sd2.session.access_token : null;
+          const resp2 = await fetch("/api/crear-vendedor", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token2 },
+            body: JSON.stringify({
+              username: backup.username,
+              nombre_completo: backup.nombre_completo,
+              telefono_whatsapp: backup.telefono_whatsapp || null,
+              password: passwordRestaurar,
+              rol: tipo
+            })
+          });
+          const resultado2 = await resp2.json();
+          if (!resp2.ok) throw new Error(resultado2.error || "No se pudo restaurar la cuenta.");
+          if (tipo === "vendedor") await cargarVendedoresAdmin(); else await cargarRepartidoresAdmin();
+          if (!backup.password_referencia) {
+            alert(`Cuenta restaurada. Como no había una contraseña registrada, se generó una nueva: ${passwordRestaurar}`);
+          }
+        }, 10);
+      }
+    } catch (e) {
+      alert("No se pudo conectar con el servidor.");
+    }
   }
 
   async function generarInformeVendedorAdmin(vendedorId, nombreVendedor) {
@@ -2712,7 +3060,7 @@
   async function cargarRepartidoresAdmin() {
     const { data, error } = await supa
       .from("perfiles")
-      .select("id, username, nombre_completo, telefono_whatsapp, rol, activo")
+      .select("id, username, nombre_completo, telefono_whatsapp, rol, activo, password_referencia")
       .eq("rol", "repartidor")
       .order("nombre_completo", { ascending: true });
 
@@ -2742,18 +3090,25 @@
           <input type="tel" value="${(r.telefono_whatsapp || "").replace(/"/g, "&quot;")}" placeholder="+56 9 xxxx xxxx"
             onchange="marcarCambioRepartidor('${r.id}','telefono_whatsapp', this.value)">
         </td>
+        <td>${celdaPasswordReferencia(r)}</td>
         <td>
           <label class="toggle-disponible">
             <input type="checkbox" ${r.activo ? "checked" : ""} onchange="toggleActivoRepartidor('${r.id}', this.checked)">
             ${r.activo ? "Activo" : "Bloqueado"}
           </label>
         </td>
+        <td style="white-space:nowrap;">
+          <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.78rem;"
+            onclick="restablecerPasswordPerfil('repartidor', '${r.id}', '${(r.nombre_completo || "").replace(/'/g, "\\'").replace(/"/g, "&quot;")}')">🔑 Restablecer</button>
+          <button type="button" class="btn btn-primary" style="padding:6px 10px;font-size:.78rem;"
+            onclick="eliminarPerfilVendedorRepartidor('repartidor', '${r.id}', '${(r.nombre_completo || "").replace(/'/g, "\\'").replace(/"/g, "&quot;")}')">🗑️ Eliminar</button>
+        </td>
       </tr>
     `).join("");
 
     wrap.innerHTML = `
       <table class="orders comunas">
-        <thead><tr><th>Repartidor</th><th>WhatsApp</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Repartidor</th><th>WhatsApp</th><th>Contraseña</th><th>Estado</th><th>Acciones</th></tr></thead>
         <tbody>${filas}</tbody>
       </table>
     `;
