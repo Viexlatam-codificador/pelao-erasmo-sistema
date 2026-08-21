@@ -129,6 +129,7 @@ textarea{resize:vertical;min-height:60px;}
 .badge-en_ruta{background:#ffe3c2;color:#8a4b00;}
 .badge-entregado{background:#d9f3e0;color:var(--verde-oscuro);}
 .badge-anulado{background:#f2d4d1;color:var(--rojo);}
+.badge-rechazado{background:#fdecea;color:#c62828;}
 table.orders{
   width:100%;
   border-collapse:collapse;
