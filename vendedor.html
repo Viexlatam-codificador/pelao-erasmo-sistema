@@ -365,6 +365,7 @@
     cargarComunas();
     cargarAlertasAtencion();
     verMisEstadisticas();
+    inicializarBotonHistorial("vendedor");
   });
 
   function escAttr(str) {
@@ -1383,7 +1384,7 @@
     await cargarMisPedidos();
     await cargarAlertasAtencion();
     abrirEdicionPedidoVendedor(id);
-    mostrarDeshacer("Pedido reactivado", async () => {
+    deshacerConHistorial("Pedido reactivado", async () => {
       const { error: e2 } = await supa.rpc("deshacer_cambio_pedido", {
         p_pedido_id: id,
         p_estado: "rechazado",
@@ -1394,6 +1395,13 @@
       if (e2) throw e2;
       await cargarMisPedidos();
       await cargarAlertasAtencion();
+    }, {
+      pagina: "vendedor", pedidoId: id, accion: "rpc",
+      payload: {
+        rpc: "deshacer_cambio_pedido",
+        params: { p_pedido_id: id, p_estado: "rechazado", p_fecha: fechaAnterior, p_necesita_atencion_vendedor: true, p_motivo_rechazo: motivoAnterior }
+      },
+      creadoPor: perfilActual ? perfilActual.nombre_completo : null
     });
   }
 
@@ -1631,11 +1639,15 @@
     delete edicionProductosExtraCache[id];
     await cargarMisPedidos();
     await cargarAlertasAtencion();
-    mostrarDeshacer("Pedido actualizado", async () => {
+    deshacerConHistorial("Pedido actualizado", async () => {
       const { error: e2 } = await supa.from("pedidos").update(valoresAnteriores).eq("id", id);
       if (e2) throw e2;
       await cargarMisPedidos();
       await cargarAlertasAtencion();
+    }, {
+      pagina: "vendedor", pedidoId: id, accion: "update", tabla: "pedidos",
+      payload: { campo: "id", valor: id, datos: valoresAnteriores },
+      creadoPor: perfilActual ? perfilActual.nombre_completo : null
     });
   }
 
@@ -1661,11 +1673,15 @@
     await cargarAlertasAtencion();
 
     if (backup) {
-      mostrarDeshacer("Pedido eliminado", async () => {
+      deshacerConHistorial("Pedido eliminado", async () => {
         const { error: e2 } = await supa.rpc("restaurar_pedido_eliminado", { p_datos: backup });
         if (e2) throw e2;
         await cargarMisPedidos();
         await cargarAlertasAtencion();
+      }, {
+        pagina: "vendedor", pedidoId: id, accion: "rpc",
+        payload: { rpc: "restaurar_pedido_eliminado", params: { p_datos: backup } },
+        creadoPor: perfilActual ? perfilActual.nombre_completo : null
       }, 10);
     }
   }
