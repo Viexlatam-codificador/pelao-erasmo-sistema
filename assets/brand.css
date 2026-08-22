@@ -343,3 +343,90 @@ table.orders th{
 .toast-deshacer-btn[disabled]{opacity:.6;cursor:default;}
 .toast-deshacer-barra{position:absolute;left:0;bottom:0;height:3px;width:100%;background:rgba(255,255,255,.15);}
 .toast-deshacer-barra-fill{height:100%;background:var(--miel);width:100%;}
+
+/* ============================================================================
+   Botón fijo de Historial + panel — a diferencia del toast de arriba, este no
+   desaparece: queda siempre a la vista para poder recuperar algo borrado o
+   editado por error, aunque haya pasado tiempo o se haya cerrado la página.
+   ============================================================================ */
+.boton-historial-fijo{
+  position:fixed;
+  right:16px;
+  bottom:16px;
+  z-index:495;
+  width:52px;
+  height:52px;
+  border-radius:50%;
+  border:none;
+  background:var(--verde-oscuro);
+  color:#fff;
+  font-size:1.35rem;
+  box-shadow:0 3px 12px rgba(0,0,0,.3);
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.panel-historial-fijo{
+  position:fixed;
+  right:16px;
+  bottom:78px;
+  z-index:495;
+  width:340px;
+  max-width:calc(100vw - 32px);
+  max-height:min(60vh, 480px);
+  background:#fff;
+  border:1px solid #e3e3da;
+  border-radius:12px;
+  box-shadow:0 6px 24px rgba(0,0,0,.28);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.panel-historial-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 12px;
+  background:#f7f7f2;
+  border-bottom:1px solid #e3e3da;
+  font-weight:700;
+  font-size:.88rem;
+  color:#333;
+  flex-shrink:0;
+}
+.panel-historial-header button{
+  border:none;
+  background:none;
+  font-size:1rem;
+  cursor:pointer;
+  color:#888;
+  padding:2px 4px;
+}
+.panel-historial-lista{overflow-y:auto;padding:6px;}
+.item-historial{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:8px 6px;
+  border-bottom:1px solid #f0f0ea;
+}
+.item-historial:last-child{border-bottom:none;}
+.item-historial.restaurado{opacity:.55;}
+.item-historial-texto{min-width:0;}
+.item-historial-desc{font-weight:600;font-size:.82rem;color:#333;}
+.item-historial-fecha{font-size:.72rem;color:#999;margin-top:2px;}
+.item-historial-restaurar{
+  flex-shrink:0;
+  padding:7px 11px;
+  border-radius:7px;
+  border:none;
+  background:#e3f2fd;
+  color:#1565c0;
+  font-weight:700;
+  font-size:.76rem;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.item-historial-badge{flex-shrink:0;font-size:.72rem;color:var(--verde-oscuro);font-weight:700;white-space:nowrap;}
