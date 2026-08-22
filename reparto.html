@@ -181,6 +181,7 @@
     renderChipsDias();
     cargarRuta();
     cargarCalendarioSemana();
+    inicializarBotonHistorial("reparto");
   });
 
   function cambiarFechaEntregados(valor) {
@@ -434,7 +435,7 @@
     renderRuta();
 
     if (estadoAnterior) {
-      mostrarDeshacer("Pedido marcado como rechazado", async () => {
+      deshacerConHistorial("Pedido marcado como rechazado", async () => {
         const { error: e2 } = await supa.rpc("deshacer_cambio_pedido", {
           p_pedido_id: pedidoId,
           p_estado: estadoAnterior,
@@ -443,6 +444,13 @@
         });
         if (e2) throw e2;
         await cargarRuta();
+      }, {
+        pagina: "reparto", pedidoId: pedidoId, accion: "rpc",
+        payload: {
+          rpc: "deshacer_cambio_pedido",
+          params: { p_pedido_id: pedidoId, p_estado: estadoAnterior, p_necesita_atencion_vendedor: false, p_limpiar_motivo: true }
+        },
+        creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
   }
@@ -476,7 +484,7 @@
     renderRuta();
 
     if (fechaAnterior) {
-      mostrarDeshacer("Pedido reagendado", async () => {
+      deshacerConHistorial("Pedido reagendado", async () => {
         const { error: e2 } = await supa.rpc("deshacer_cambio_pedido", {
           p_pedido_id: pedidoId,
           p_fecha: fechaAnterior,
@@ -484,6 +492,10 @@
         });
         if (e2) throw e2;
         await cargarRuta();
+      }, {
+        pagina: "reparto", pedidoId: pedidoId, accion: "rpc",
+        payload: { rpc: "deshacer_cambio_pedido", params: { p_pedido_id: pedidoId, p_fecha: fechaAnterior, p_dia_reparto: diaAnterior } },
+        creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
   }
@@ -645,13 +657,17 @@
     renderRuta();
 
     if (estadoAnterior && estadoAnterior !== nuevoEstado) {
-      mostrarDeshacer(`Marcado como "${ESTADO_LABEL[nuevoEstado] || nuevoEstado}"`, async () => {
+      deshacerConHistorial(`Marcado como "${ESTADO_LABEL[nuevoEstado] || nuevoEstado}"`, async () => {
         const { error: e2 } = await supa.rpc("deshacer_cambio_pedido", {
           p_pedido_id: pedidoId,
           p_estado: estadoAnterior
         });
         if (e2) throw e2;
         await cargarRuta();
+      }, {
+        pagina: "reparto", pedidoId: pedidoId, accion: "rpc",
+        payload: { rpc: "deshacer_cambio_pedido", params: { p_pedido_id: pedidoId, p_estado: estadoAnterior } },
+        creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
   }
