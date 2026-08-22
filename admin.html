@@ -750,6 +750,7 @@
     cargarPedidosAdmin();
     cargarRepartidoresAdmin();
     cargarCalendarioSemanaAdmin();
+    inicializarBotonHistorial("admin");
   });
 
   document.getElementById("filtroComuna").addEventListener("input", renderComunas);
@@ -1084,10 +1085,13 @@
     }
     cargarDiasEspecialesAdmin();
     if (backup) {
-      mostrarDeshacer("Día especial eliminado", async () => {
+      deshacerConHistorial("Día especial eliminado", async () => {
         const { error: e2 } = await supa.from("dias_especiales_reparto").insert(backup);
         if (e2) throw e2;
         cargarDiasEspecialesAdmin();
+      }, {
+        pagina: "admin", accion: "insert", tabla: "dias_especiales_reparto",
+        payload: { datos: backup }, creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
   }
@@ -1245,10 +1249,13 @@
     tramosCache = tramosCache.filter(t => t.id !== id);
     renderProductosAdmin();
     if (backup) {
-      mostrarDeshacer("Tramo de precio eliminado", async () => {
+      deshacerConHistorial("Tramo de precio eliminado", async () => {
         const { error: e2 } = await supa.from("producto_tramos").insert(backup);
         if (e2) throw e2;
         cargarProductosAdmin();
+      }, {
+        pagina: "admin", accion: "insert", tabla: "producto_tramos",
+        payload: { datos: backup }, creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
   }
@@ -1312,10 +1319,13 @@
     }
     cargarProductosAdmin();
     if (backup) {
-      mostrarDeshacer(`Producto "${nombre}" eliminado`, async () => {
+      deshacerConHistorial(`Producto "${nombre}" eliminado`, async () => {
         const { error: e2 } = await supa.from("productos").insert(backup);
         if (e2) throw e2;
         cargarProductosAdmin();
+      }, {
+        pagina: "admin", accion: "insert", tabla: "productos",
+        payload: { datos: backup }, creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
   }
@@ -1841,13 +1851,17 @@
     cargarResumenPedidos();
 
     if (fechasAnteriores.length) {
-      mostrarDeshacer(`Fecha aplicada a ${fechasAnteriores.length} pedido${fechasAnteriores.length === 1 ? "" : "s"}`, async () => {
+      deshacerConHistorial(`Fecha aplicada a ${fechasAnteriores.length} pedido${fechasAnteriores.length === 1 ? "" : "s"}`, async () => {
         for (const item of fechasAnteriores) {
           const { error: e2 } = await supa.from("pedidos").update({ fecha: item.fecha }).eq("id", item.id);
           if (e2) throw e2;
         }
         await cargarPedidosAdmin();
         cargarResumenPedidos();
+      }, {
+        pagina: "admin", accion: "update_lote", tabla: "pedidos",
+        payload: { items: fechasAnteriores.map(item => ({ id: item.id, datos: { fecha: item.fecha } })) },
+        creadoPor: perfilActual ? perfilActual.nombre_completo : null
       }, 10);
     }
   }
@@ -2090,7 +2104,7 @@
     delete pedidoHistorialCache[id]; // se recarga si vuelve a abrir el historial
     cargarResumenPedidos();
     if (estadoAnterior && estadoAnterior !== nuevoEstado) {
-      mostrarDeshacer(`Estado cambiado a "${ESTADO_LABEL[nuevoEstado] || nuevoEstado}"`, async () => {
+      deshacerConHistorial(`Estado cambiado a "${ESTADO_LABEL[nuevoEstado] || nuevoEstado}"`, async () => {
         const { error: e2 } = await supa.from("pedidos").update({ estado: estadoAnterior }).eq("id", id);
         if (e2) throw e2;
         const p2 = pedidosCache.find(x => x.id === id);
@@ -2098,6 +2112,10 @@
         delete pedidoHistorialCache[id];
         renderPedidosAdmin();
         cargarResumenPedidos();
+      }, {
+        pagina: "admin", pedidoId: id, accion: "update", tabla: "pedidos",
+        payload: { campo: "id", valor: id, datos: { estado: estadoAnterior } },
+        creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
   }
@@ -2111,13 +2129,17 @@
     if (p) p.fecha = nuevaFecha;
     cargarResumenPedidos();
     if (fechaAnterior && fechaAnterior !== nuevaFecha) {
-      mostrarDeshacer("Fecha del pedido cambiada", async () => {
+      deshacerConHistorial("Fecha del pedido cambiada", async () => {
         const { error: e2 } = await supa.from("pedidos").update({ fecha: fechaAnterior }).eq("id", id);
         if (e2) throw e2;
         const p2 = pedidosCache.find(x => x.id === id);
         if (p2) p2.fecha = fechaAnterior;
         renderPedidosAdmin();
         cargarResumenPedidos();
+      }, {
+        pagina: "admin", pedidoId: id, accion: "update", tabla: "pedidos",
+        payload: { campo: "id", valor: id, datos: { fecha: fechaAnterior } },
+        creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
   }
@@ -2190,10 +2212,14 @@
     delete edicionDespachoCache[id];
     cargarPedidosAdmin();
     if (valoresAnteriores) {
-      mostrarDeshacer("Pedido actualizado", async () => {
+      deshacerConHistorial("Pedido actualizado", async () => {
         const { error: e2 } = await supa.from("pedidos").update(valoresAnteriores).eq("id", id);
         if (e2) throw e2;
         cargarPedidosAdmin();
+      }, {
+        pagina: "admin", pedidoId: id, accion: "update", tabla: "pedidos",
+        payload: { campo: "id", valor: id, datos: valoresAnteriores },
+        creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
   }
@@ -2212,11 +2238,15 @@
     cargarPedidosAdmin();
     cargarResumenPedidos();
     if (pedidoBackup) {
-      mostrarDeshacer("Pedido eliminado", async () => {
+      deshacerConHistorial("Pedido eliminado", async () => {
         const { error: e2 } = await supa.rpc("restaurar_pedido_eliminado", { p_datos: pedidoBackup });
         if (e2) throw e2;
         cargarPedidosAdmin();
         cargarResumenPedidos();
+      }, {
+        pagina: "admin", pedidoId: id, accion: "rpc",
+        payload: { rpc: "restaurar_pedido_eliminado", params: { p_datos: pedidoBackup } },
+        creadoPor: perfilActual ? perfilActual.nombre_completo : null
       }, 10);
     }
   }
@@ -2870,6 +2900,14 @@
         renderVendedoresAdmin();
         renderRepartidoresAdmin();
       });
+      if (passwordAnterior) {
+        registrarHistorial({
+          pagina: "admin", pedidoId: null, descripcion: `Contraseña de ${nombre} cambiada`,
+          accion: "fetch",
+          payload: { url: "/api/admin-reset-password", method: "POST", body: { userId: id, nuevaPassword: passwordAnterior } },
+          creadoPor: perfilActual ? perfilActual.nombre_completo : null
+        });
+      }
     } catch (e) {
       alert("No se pudo conectar con el servidor.");
     }
@@ -2900,7 +2938,8 @@
       if (tipo === "vendedor") await cargarVendedoresAdmin(); else await cargarRepartidoresAdmin();
 
       if (backup) {
-        mostrarDeshacer(`${tipo === "vendedor" ? "Vendedor" : "Repartidor"} "${nombre}" eliminado`, async () => {
+        const descripcionEliminado = `${tipo === "vendedor" ? "Vendedor" : "Repartidor"} "${nombre}" eliminado`;
+        mostrarDeshacer(descripcionEliminado, async () => {
           const passwordRestaurar = backup.password_referencia || generarPasswordAleatoria();
           const { data: sd2 } = await supa.auth.getSession();
           const token2 = sd2 && sd2.session ? sd2.session.access_token : null;
@@ -2922,6 +2961,21 @@
             alert(`Cuenta restaurada. Como no había una contraseña registrada, se generó una nueva: ${passwordRestaurar}`);
           }
         }, 10);
+        registrarHistorial({
+          pagina: "admin", pedidoId: null, descripcion: descripcionEliminado,
+          accion: "fetch",
+          payload: {
+            url: "/api/crear-vendedor", method: "POST",
+            body: {
+              username: backup.username,
+              nombre_completo: backup.nombre_completo,
+              telefono_whatsapp: backup.telefono_whatsapp || null,
+              password: backup.password_referencia || "__GENERAR__",
+              rol: tipo
+            }
+          },
+          creadoPor: perfilActual ? perfilActual.nombre_completo : null
+        });
       }
     } catch (e) {
       alert("No se pudo conectar con el servidor.");
