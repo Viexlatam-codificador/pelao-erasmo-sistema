@@ -222,3 +222,128 @@ function generarInformeVentasPDF({ pedidos, nombreVendedor, desde, hasta, titulo
 function generarInformeSemanalPDF({ pedidos, nombreVendedor, desde, hasta }) {
   generarInformeVentasPDF({ pedidos, nombreVendedor, desde, hasta, tituloPeriodo: "Informe semanal de ventas" });
 }
+
+// ============================================================================
+// Informe general de ventas (dueño del negocio) — a diferencia de los
+// informes de arriba (pensados para que UN vendedor vea lo suyo), este junta
+// cualquier conjunto de pedidos ya filtrado (rango de fechas, vendedor,
+// comuna o región) y agrega desglose por vendedor, por comuna y por forma
+// de pago, para analizar el negocio completo.
+// ============================================================================
+function calcularEstadisticasGeneralInforme(pedidos, vendedoresPorId) {
+  const base = calcularEstadisticasInforme(pedidos);
+
+  const totalesPorVendedor = {};
+  base.entregados.forEach((p) => {
+    const nombre = p.vendedor_id ? ((vendedoresPorId || {})[p.vendedor_id] || "—") : "Sin vendedor";
+    if (!totalesPorVendedor[nombre]) totalesPorVendedor[nombre] = { nombre, cantidad: 0, total: 0 };
+    totalesPorVendedor[nombre].cantidad++;
+    totalesPorVendedor[nombre].total += p.total || 0;
+  });
+  const porVendedor = Object.values(totalesPorVendedor).sort((a, b) => b.total - a.total);
+
+  const totalesPorComuna = {};
+  base.entregados.forEach((p) => {
+    const nombre = p.comuna || "Sin comuna";
+    if (!totalesPorComuna[nombre]) totalesPorComuna[nombre] = { nombre, cantidad: 0, total: 0 };
+    totalesPorComuna[nombre].cantidad++;
+    totalesPorComuna[nombre].total += p.total || 0;
+  });
+  const porComuna = Object.values(totalesPorComuna).sort((a, b) => b.total - a.total);
+
+  const totalesPorFormaPago = {};
+  base.entregados.forEach((p) => {
+    const forma = p.forma_pago || "Sin especificar";
+    totalesPorFormaPago[forma] = (totalesPorFormaPago[forma] || 0) + (p.total || 0);
+  });
+  const porFormaPago = Object.entries(totalesPorFormaPago)
+    .map(([forma, total]) => ({ forma, total }))
+    .sort((a, b) => b.total - a.total);
+
+  return Object.assign({}, base, { porVendedor, porComuna, porFormaPago });
+}
+
+// PDF con el resumen general del negocio (no de un solo vendedor): KPIs +
+// desglose por vendedor, por comuna y por forma de pago.
+function generarInformeGeneralPDF({ pedidos, vendedoresPorId, desde, hasta, filtroDescripcion }) {
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert("No se pudo generar el PDF: la librería no cargó. Revisa tu conexión e intenta de nuevo.");
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const stats = calcularEstadisticasGeneralInforme(pedidos, vendedoresPorId);
+
+  doc.setFontSize(16);
+  doc.setTextColor(21, 87, 36);
+  doc.text("El Pelao Erasmo — Informe general de ventas", 14, 18);
+
+  doc.setFontSize(11);
+  doc.setTextColor(60, 60, 60);
+  doc.text(`Periodo: ${desde} al ${hasta}`, 14, 27);
+  if (filtroDescripcion) doc.text(`Filtros: ${filtroDescripcion}`, 14, 33);
+  doc.text(`Generado: ${new Date().toLocaleString("es-CL")}`, 14, filtroDescripcion ? 39 : 33);
+
+  let cursorY = filtroDescripcion ? 49 : 43;
+  doc.setFontSize(12);
+  doc.setTextColor(21, 87, 36);
+  doc.text("Resumen del periodo", 14, cursorY);
+  doc.autoTable({
+    startY: cursorY + 4,
+    theme: "plain",
+    styles: { fontSize: 9, cellPadding: 1.5 },
+    body: [
+      ["Vendido y entregado", `${moneyInforme(stats.totalEntregado)}  (${stats.entregados.length} pedido${stats.entregados.length === 1 ? "" : "s"})`],
+      ["Todavía en curso", `${moneyInforme(stats.totalEnCurso)}  (${stats.enCurso.length} pedido${stats.enCurso.length === 1 ? "" : "s"})`],
+      ["Ticket promedio", moneyInforme(stats.ticketPromedio)],
+      ["Bidones Pipeño 5L entregados", String(stats.totalPipeno)],
+      ["Displays Granadina entregados", String(stats.totalGranadina)],
+      ["Rechazados / reagendados", String(stats.rechazados.length)],
+      ["Anulados", String(stats.anulados.length)]
+    ]
+  });
+  cursorY = doc.lastAutoTable.finalY + 10;
+
+  if (cursorY > 240) { doc.addPage(); cursorY = 18; }
+  doc.setFontSize(12);
+  doc.setTextColor(21, 87, 36);
+  doc.text("Ventas por vendedor", 14, cursorY);
+  doc.autoTable({
+    startY: cursorY + 3,
+    head: [["Vendedor", "Pedidos", "Total"]],
+    body: stats.porVendedor.map(v => [v.nombre, String(v.cantidad), moneyInforme(v.total)]),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [21, 87, 36] },
+    margin: { left: 14, right: 14 }
+  });
+  cursorY = doc.lastAutoTable.finalY + 10;
+
+  if (cursorY > 240) { doc.addPage(); cursorY = 18; }
+  doc.setFontSize(12);
+  doc.setTextColor(21, 87, 36);
+  doc.text("Ventas por comuna", 14, cursorY);
+  doc.autoTable({
+    startY: cursorY + 3,
+    head: [["Comuna", "Pedidos", "Total"]],
+    body: stats.porComuna.map(c => [c.nombre, String(c.cantidad), moneyInforme(c.total)]),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [21, 87, 36] },
+    margin: { left: 14, right: 14 }
+  });
+  cursorY = doc.lastAutoTable.finalY + 10;
+
+  if (cursorY > 250) { doc.addPage(); cursorY = 18; }
+  doc.setFontSize(12);
+  doc.setTextColor(21, 87, 36);
+  doc.text("Ventas por forma de pago", 14, cursorY);
+  doc.autoTable({
+    startY: cursorY + 3,
+    head: [["Forma de pago", "Total"]],
+    body: stats.porFormaPago.map(f => [f.forma, moneyInforme(f.total)]),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [21, 87, 36] },
+    margin: { left: 14, right: 14 }
+  });
+
+  doc.save(`informe-general-ventas-${desde}-a-${hasta}.pdf`);
+}
