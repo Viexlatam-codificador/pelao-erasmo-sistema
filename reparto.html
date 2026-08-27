@@ -167,6 +167,14 @@
     return DIAS_POR_INDICE_JS[new Date().getDay()];
   }
 
+  // Mismo cálculo que usa admin.html — a partir de una fecha "YYYY-MM-DD"
+  // (en hora local, para no correrse un día por husos horarios) devuelve el
+  // día de la semana que le corresponde como dia_reparto.
+  function diaSemanaDeFechaReparto(fechaStr) {
+    const [y, m, d] = fechaStr.split("-").map(Number);
+    return DIAS_POR_INDICE_JS[new Date(y, m - 1, d).getDay()];
+  }
+
   let perfilActual = null;
   let diaSeleccionado = diaDeHoy();
   let esAdmin = false;
@@ -475,6 +483,12 @@
       if (tarjeta) tarjeta.style.opacity = "1";
       return;
     }
+
+    // El RPC deja la fecha nueva, pero el día de la semana (dia_reparto) hay
+    // que recalcularlo acá — si no, el pedido queda con el día viejo y no
+    // aparece en la ruta correcta sin tener que corregirlo a mano después.
+    const diaNuevo = diaSemanaDeFechaReparto(nuevaFecha);
+    await supa.from("pedidos").update({ dia_reparto: diaNuevo }).eq("id", pedidoId);
 
     accionAbiertaId = null;
     accionAbiertaTipo = null;
