@@ -103,6 +103,12 @@
     background:#fff; border:1px solid #eee; border-radius:10px; padding:9px 12px; margin-bottom:8px; font-size:.85rem;
   }
   .calendario-detalle-item:last-child{ margin-bottom:0; }
+
+  #rutaImprimibleArea{ display:none; }
+  @media print{
+    body.modo-impresion-ruta > *{ display:none !important; }
+    body.modo-impresion-ruta #rutaImprimibleArea{ display:block !important; }
+  }
 </style>
 </head>
 <body>
@@ -224,6 +230,55 @@
 
   <section class="card">
     <h2 class="card-title">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>
+      Informes generales de ventas
+    </h2>
+    <p style="font-size:.85rem;color:#666;margin:0 0 10px;">
+      Elige un periodo (y, si quieres, un vendedor, comuna o región) para ver
+      un resumen general del negocio: cuánto se vendió, cuánto va en curso, y
+      cómo se reparte entre vendedores y comunas. Sirve para analizar y
+      exportar datos de ventas, no solo de un vendedor puntual.
+    </p>
+    <div class="filtro-bar">
+      <div style="flex:1;min-width:140px;">
+        <label style="margin:0;">Desde</label>
+        <input type="date" id="informeGeneralDesde">
+      </div>
+      <div style="flex:1;min-width:140px;">
+        <label style="margin:0;">Hasta</label>
+        <input type="date" id="informeGeneralHasta">
+      </div>
+    </div>
+    <div class="filtro-bar">
+      <select id="informeGeneralVendedor">
+        <option value="">Todos los vendedores</option>
+        <option value="__sin_vendedor__">Sin vendedor (venta orgánica)</option>
+      </select>
+      <select id="informeGeneralRegion">
+        <option value="">Todas las regiones</option>
+        <option value="Región Metropolitana">Región Metropolitana</option>
+        <option value="V Región">V Región</option>
+      </select>
+      <input type="text" id="informeGeneralComuna" placeholder="Filtrar por comuna...">
+    </div>
+    <button type="button" class="btn btn-secondary" style="padding:8px 14px;font-size:.85rem;" onclick="generarInformeGeneralAdmin()">Generar informe</button>
+    <p class="status-msg" id="informeGeneralStatus"></p>
+
+    <div id="informeGeneralResultado" style="display:none;margin-top:14px;">
+      <div class="resumen-grid" id="informeGeneralKpis"></div>
+      <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:16px 0 8px;">Ventas por vendedor</p>
+      <table class="orders" id="informeGeneralTablaVendedor"></table>
+      <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:16px 0 8px;">Ventas por comuna</p>
+      <table class="orders" id="informeGeneralTablaComuna"></table>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button type="button" class="btn btn-primary" style="flex:1;font-size:.82rem;padding:9px;" onclick="descargarInformeGeneralPDF()">📄 Descargar PDF</button>
+        <button type="button" class="btn btn-secondary" style="flex:1;font-size:.82rem;padding:9px;" onclick="descargarInformeGeneralExcel()">📊 Descargar Excel</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">
       <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
       Historial de entregas
     </h2>
@@ -312,6 +367,7 @@
     <p style="font-size:.78rem;color:#888;margin:6px 0 0;display:none;" id="rutaPasarMananaAyuda">Para lo que quedó pendiente, en preparación, listo p/despacho o en ruta y NO se alcanzó a entregar hoy: lo mueve a la ruta de mañana en vez de perderlo. Lo ya entregado o anulado no se toca.</p>
     <p class="status-msg" id="rutaEnviarStatus"></p>
     <button class="btn btn-primary btn-block" style="margin-top:8px;display:none;" id="rutaExportarBtn" onclick="exportarRutaExcel()">Descargar Excel de esta ruta</button>
+    <button class="btn btn-secondary btn-block" style="margin-top:10px;display:none;" id="rutaImprimirBtn" onclick="imprimirRuta()">🖨️ Imprimir ruta del día</button>
     <button class="btn btn-secondary btn-block" style="margin-top:10px;display:none;" id="rutaMapaBtn" onclick="toggleMapaRutaAdmin()">🗺️ Ver y planificar en mapa</button>
 
     <div id="mapaRutaAdminWrap" style="display:none;margin-top:14px;">
@@ -372,6 +428,14 @@
             <option value="no">No disponible</option>
           </select>
         </div>
+        <div style="flex:1;min-width:160px;">
+          <label style="margin:0;">Envío gratis</label>
+          <select id="loteComunasEnvioGratis">
+            <option value="">— sin cambiar —</option>
+            <option value="si">Marcar envío gratis</option>
+            <option value="no">Desmarcar envío gratis</option>
+          </select>
+        </div>
         <button type="button" class="btn btn-secondary" style="padding:9px 14px;font-size:.82rem;" onclick="aplicarCambioMasivoComunas()">Aplicar a las seleccionadas</button>
       </div>
       <p style="font-size:.75rem;color:#888;margin:6px 0 0;">Esto solo prepara el cambio (igual que editar una fila a mano) — sigue faltando tocar "Guardar todos los cambios" para que quede guardado de verdad.</p>
@@ -422,6 +486,28 @@
     </div>
     <button class="btn btn-secondary btn-block" style="margin-top:14px;" onclick="agregarComuna()">Agregar comuna</button>
     <p class="status-msg" id="nuevaComunaStatus"></p>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Precios de productos
+    </h2>
+    <p style="font-size:.85rem;color:#666;margin:0 0 10px;">
+      Pipeño 5L y Granadina son los productos base del catálogo — acá solo se
+      pueden ajustar los montos por tramo o por unidad, no agregar, quitar ni
+      renombrar categorías (para productos extra, como Pipeño 2L, está el
+      "Catálogo de productos" más abajo).
+    </p>
+    <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 8px;">🧃 Pipeño 5L — precio por bidón, según cantidad y región</p>
+    <div id="preciosPipenoWrap" style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px;"></div>
+    <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 8px;">🍇 Granadina — precio fijo por display</p>
+    <div style="max-width:220px;">
+      <label>Precio por display</label>
+      <input type="number" min="0" id="preciosGranadinaInput" value="0">
+    </div>
+    <button class="btn btn-primary btn-block" style="margin-top:16px;" onclick="guardarPreciosProductosAdmin()">Guardar precios</button>
+    <p class="status-msg" id="preciosProductosStatus"></p>
   </section>
 
   <section class="card">
@@ -738,7 +824,11 @@
     perfilActual = perfil;
     document.getElementById("nombreAdmin").textContent = perfil.nombre_completo;
     document.getElementById("informeSemanaAdmin").value = new Date().toISOString().slice(0, 10);
+    const hoyInformeGeneral = new Date();
+    document.getElementById("informeGeneralDesde").value = new Date(hoyInformeGeneral.getFullYear(), hoyInformeGeneral.getMonth(), 1).toISOString().slice(0, 10);
+    document.getElementById("informeGeneralHasta").value = hoyInformeGeneral.toISOString().slice(0, 10);
     cargarComunasAdmin();
+    cargarPreciosProductosAdmin();
     cargarDiasEspecialesAdmin();
     cargarProductosAdmin();
     cargarBannerAdmin();
@@ -762,7 +852,7 @@
   async function cargarComunasAdmin() {
     const { data, error } = await supa
       .from("comunas_rutas")
-      .select("id, comuna, region, dia_reparto, precio_despacho, activa")
+      .select("id, comuna, region, dia_reparto, precio_despacho, activa, envio_gratis_defecto")
       .order("comuna", { ascending: true });
 
     if (error) {
@@ -774,6 +864,76 @@
     filasCambiadas.clear();
     comunasSeleccionadas.clear();
     renderComunas();
+  }
+
+  // ==========================================================================
+  // Precios de productos (Pipeño 5L por tramos + Granadina) — guardados en la
+  // tabla genérica `configuraciones`. pricing.js las usa como fuente de
+  // verdad (aplicarPrecios) en cuanto se cargan acá y en vendedor.html.
+  // ==========================================================================
+  async function cargarPreciosProductosAdmin() {
+    const { data } = await supa.from("configuraciones").select("clave, valor").in("clave", ["pricing_tiers", "precio_granadina"]);
+    const filaTiers = (data || []).find(r => r.clave === "pricing_tiers");
+    const filaGranadina = (data || []).find(r => r.clave === "precio_granadina");
+    aplicarPrecios({ pricing_tiers: filaTiers ? filaTiers.valor : null, precio_granadina: filaGranadina ? filaGranadina.valor : null });
+    renderPreciosProductosAdmin();
+  }
+
+  function renderPreciosProductosAdmin() {
+    const wrap = document.getElementById("preciosPipenoWrap");
+    const bloqueRegion = (regionKey) => {
+      const region = PRICING[regionKey];
+      const filas = region.tiers.map((t, i) => {
+        const etiquetaRango = t.max === Infinity ? `${t.min} o más` : `${t.min} a ${t.max}`;
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="flex:1;font-size:.82rem;color:#555;">${etiquetaRango} bidones</span>
+          <input type="number" min="0" style="width:110px;" id="precioTier_${regionKey}_${i}" value="${t.price}"></div>`;
+      }).join("");
+      return `<div style="flex:1;min-width:220px;"><p style="font-size:.8rem;font-weight:700;color:#555;margin:0 0 6px;">${region.label}</p>${filas}</div>`;
+    };
+    wrap.innerHTML = bloqueRegion("rm") + bloqueRegion("vr");
+    document.getElementById("preciosGranadinaInput").value = GRANADINA_PRICE;
+  }
+
+  async function guardarPreciosProductosAdmin() {
+    const status = document.getElementById("preciosProductosStatus");
+    status.className = "status-msg"; status.textContent = "Guardando...";
+    const { data: filasAnteriores } = await supa.from("configuraciones").select("clave, valor").in("clave", ["pricing_tiers", "precio_granadina"]);
+    const tiersAnterior = (filasAnteriores || []).find(r => r.clave === "pricing_tiers");
+    const granadinaAnterior = (filasAnteriores || []).find(r => r.clave === "precio_granadina");
+    const nuevosTiers = {};
+    ["rm", "vr"].forEach(regionKey => {
+      nuevosTiers[regionKey] = {
+        min: PRICING[regionKey].min,
+        tiers: PRICING[regionKey].tiers.map((t, i) => ({
+          min: t.min, max: t.max === Infinity ? null : t.max,
+          price: Math.max(0, parseInt(document.getElementById(`precioTier_${regionKey}_${i}`).value, 10) || 0)
+        }))
+      };
+    });
+    const nuevoGranadina = Math.max(0, parseInt(document.getElementById("preciosGranadinaInput").value, 10) || 0);
+    const { error: e1 } = await supa.from("configuraciones").upsert({ clave: "pricing_tiers", valor: nuevosTiers }, { onConflict: "clave" });
+    const { error: e2 } = await supa.from("configuraciones").upsert({ clave: "precio_granadina", valor: nuevoGranadina }, { onConflict: "clave" });
+    if (e1 || e2) { status.classList.add("error"); status.textContent = "No se pudo guardar: " + ((e1 || e2).message); return; }
+    aplicarPrecios({ pricing_tiers: nuevosTiers, precio_granadina: nuevoGranadina });
+    renderPreciosProductosAdmin();
+    status.classList.add("ok"); status.textContent = "Precios actualizados. Ya se reflejan en el panel de los vendedores.";
+    deshacerConHistorial("Precios de productos actualizados", async () => {
+      if (tiersAnterior) await supa.from("configuraciones").upsert({ clave: "pricing_tiers", valor: tiersAnterior.valor }, { onConflict: "clave" });
+      if (granadinaAnterior) await supa.from("configuraciones").upsert({ clave: "precio_granadina", valor: granadinaAnterior.valor }, { onConflict: "clave" });
+      aplicarPrecios({ pricing_tiers: tiersAnterior ? tiersAnterior.valor : null, precio_granadina: granadinaAnterior ? granadinaAnterior.valor : null });
+      renderPreciosProductosAdmin();
+    }, {
+      pagina: "admin", accion: "upsert", tabla: "configuraciones",
+      payload: { datos: { clave: "pricing_tiers", valor: tiersAnterior ? tiersAnterior.valor : null }, onConflict: "clave" },
+      creadoPor: perfilActual ? perfilActual.nombre_completo : null
+    });
+    registrarHistorial({
+      pagina: "admin", accion: "upsert", tabla: "configuraciones",
+      descripcion: "Precio de Granadina actualizado",
+      payload: { datos: { clave: "precio_granadina", valor: granadinaAnterior ? granadinaAnterior.valor : null }, onConflict: "clave" },
+      creadoPor: perfilActual ? perfilActual.nombre_completo : null
+    });
   }
 
   function ordenRegion(region) {
@@ -830,6 +990,13 @@
             ${c.activa !== false ? "Disponible" : "No disponible"}
           </label>
         </td>
+        <td>
+          <label class="toggle-disponible">
+            <input type="checkbox" ${c.envio_gratis_defecto === true ? "checked" : ""}
+              onchange="marcarCambio('${c.id}','envio_gratis_defecto', this.checked)">
+            ${c.envio_gratis_defecto === true ? "🎁 Envío gratis" : "🎁 Envío pagado"}
+          </label>
+        </td>
       </tr>
     `;
 
@@ -841,7 +1008,7 @@
           <div class="region-contenido">
             <table class="orders comunas">
               <thead>
-                <tr><th style="width:34px;"></th><th>Comuna</th><th>Día de reparto</th><th>Despacho ($)</th><th>Disponibilidad</th></tr>
+                <tr><th style="width:34px;"></th><th>Comuna</th><th>Día de reparto</th><th>Despacho ($)</th><th>Disponibilidad</th><th>Envío gratis</th></tr>
               </thead>
               <tbody>${comunasRegion.map(filaHtml).join("")}</tbody>
             </table>
@@ -858,7 +1025,7 @@
     filasCambiadas.add(id);
     const fila = document.querySelector(`tr[data-id="${id}"]`);
     if (fila) fila.classList.add("fila-cambiada");
-    if (campo === "activa") {
+    if (campo === "activa" || campo === "envio_gratis_defecto") {
       // Refresca la etiqueta de texto sin perder el foco del resto de la fila.
       renderComunas();
     }
@@ -889,9 +1056,10 @@
     const diaTocado = document.getElementById("loteComunasDia").selectedIndex > 0;
     const precioRaw = document.getElementById("loteComunasPrecio").value;
     const disponibilidad = document.getElementById("loteComunasDisponibilidad").value;
+    const envioGratisLote = document.getElementById("loteComunasEnvioGratis").value;
 
-    if (!diaTocado && precioRaw === "" && !disponibilidad) {
-      alert("Elige al menos un campo para aplicar (día, precio o disponibilidad).");
+    if (!diaTocado && precioRaw === "" && !disponibilidad && !envioGratisLote) {
+      alert("Elige al menos un campo para aplicar (día, precio, disponibilidad o envío gratis).");
       return;
     }
 
@@ -899,11 +1067,13 @@
       if (diaTocado) marcarCambio(id, "dia_reparto", dia);
       if (precioRaw !== "") marcarCambio(id, "precio_despacho", parseInt(precioRaw, 10));
       if (disponibilidad) marcarCambio(id, "activa", disponibilidad === "si");
+      if (envioGratisLote) marcarCambio(id, "envio_gratis_defecto", envioGratisLote === "si");
     });
 
     document.getElementById("loteComunasPrecio").value = "";
     document.getElementById("loteComunasDia").selectedIndex = 0;
     document.getElementById("loteComunasDisponibilidad").value = "";
+    document.getElementById("loteComunasEnvioGratis").value = "";
     renderComunas();
   }
 
@@ -928,7 +1098,8 @@
         .update({
           dia_reparto: c.dia_reparto || null,
           precio_despacho: c.precio_despacho,
-          activa: c.activa !== false
+          activa: c.activa !== false,
+          envio_gratis_defecto: c.envio_gratis_defecto === true
         })
         .eq("id", c.id);
       if (error) errores++;
@@ -1879,6 +2050,43 @@
   }
   const PIPENO5L_NOMBRE_ADMIN = "Pipeño 5L";
 
+  // ==========================================================================
+  // Orden de la lista de Pedidos — clic en un encabezado ordena por esa
+  // columna; un segundo clic en el mismo encabezado invierte el orden.
+  // ==========================================================================
+  let pedidosOrdenCampo = "creado_en";
+  let pedidosOrdenDireccion = "desc";
+
+  const PEDIDOS_ORDEN_COMPARADORES = {
+    fecha: (p) => p.fecha || "",
+    cliente: (p) => (p.nombre_cliente || "").toLowerCase(),
+    comuna: (p) => (p.comuna || "").toLowerCase(),
+    vendedor: (p) => {
+      const v = vendedoresCache.find(x => x.id === p.vendedor_id);
+      return (v ? v.nombre_completo : (p.vendedor_id ? "" : "zzz")).toLowerCase();
+    },
+    total: (p) => p.total || 0,
+    estado: (p) => ESTADO_LABEL[p.estado] || p.estado || "",
+    creado_en: (p) => p.creado_en || ""
+  };
+
+  function ordenarPedidosAdmin(campo) {
+    if (pedidosOrdenCampo === campo) {
+      pedidosOrdenDireccion = pedidosOrdenDireccion === "asc" ? "desc" : "asc";
+    } else {
+      pedidosOrdenCampo = campo;
+      // Fecha, total y "creado" parten de más nuevo/mayor a menor; el resto
+      // (texto) parte alfabético A→Z — es lo que se espera al tocar cada uno.
+      pedidosOrdenDireccion = (campo === "cliente" || campo === "comuna" || campo === "vendedor" || campo === "estado") ? "asc" : "desc";
+    }
+    renderPedidosAdmin();
+  }
+
+  function iconoOrdenPedidos(campo) {
+    if (pedidosOrdenCampo !== campo) return '<span class="orden-flecha">↕</span>';
+    return `<span class="orden-flecha activa">${pedidosOrdenDireccion === "asc" ? "↑" : "↓"}</span>`;
+  }
+
   // Región Metropolitana primero, V Región después — mismo orden que la
   // sección de comunas, para que la lista de pedidos quede igual de ordenada.
   function renderPedidosAdmin() {
@@ -1894,12 +2102,20 @@
       return;
     }
 
-    const listaOrdenada = pedidosCache.slice().sort((a, b) => (b.creado_en || "").localeCompare(a.creado_en || ""));
+    const claveOrden = PEDIDOS_ORDEN_COMPARADORES[pedidosOrdenCampo] || PEDIDOS_ORDEN_COMPARADORES.creado_en;
+    const signo = pedidosOrdenDireccion === "asc" ? 1 : -1;
+    const listaOrdenada = pedidosCache.slice().sort((a, b) => {
+      const va = claveOrden(a), vb = claveOrden(b);
+      if (va < vb) return -1 * signo;
+      if (va > vb) return 1 * signo;
+      return 0;
+    });
 
     const filaHtml = (p) => {
       const vendedor = vendedoresCache.find(v => v.id === p.vendedor_id);
       const nombreVendedor = vendedor ? vendedor.nombre_completo : (p.vendedor_id ? "—" : "Sin vendedor");
       const hora = p.creado_en ? new Date(p.creado_en).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }) : "-";
+      const chipsProductos = nombreOtrosProductos(p).map(t => `<span class="chip-producto">${t}</span>`).join("");
       return `
         <tr data-pedido-id="${p.id}">
           <td><input type="checkbox" ${pedidosSeleccionados.has(p.id) ? "checked" : ""} onchange="toggleSeleccionPedidoAdmin('${p.id}', this.checked)"></td>
@@ -1912,9 +2128,9 @@
           <td>${nombreVendedor}</td>
           <td style="font-size:.78rem;">${p.forma_pago}</td>
           <td style="font-weight:700;">${money(p.total)}</td>
-          <td style="font-size:.76rem;color:#666;max-width:150px;">${nombreOtrosProductos(p).join(" · ") || "-"}</td>
+          <td class="celda-productos">${chipsProductos || '<span style="color:#bbb;">-</span>'}</td>
           <td>
-            <select onchange="cambiarEstadoPedido('${p.id}', this.value)">
+            <select class="select-estado badge-${p.estado}" onchange="cambiarEstadoPedido('${p.id}', this.value)">
               ${Object.keys(ESTADO_LABEL).map(e => `<option value="${e}" ${e === p.estado ? "selected" : ""}>${ESTADO_LABEL[e]}</option>`).join("")}
             </select>
           </td>
@@ -1936,7 +2152,18 @@
           <div class="region-contenido">
             <table class="orders comunas pedidos-tabla">
               <thead>
-                <tr><th style="width:30px;"></th><th>Fecha / hora / ruta</th><th>Cliente</th><th>Comuna</th><th>Vendedor</th><th>Pago</th><th>Total</th><th>Productos</th><th>Estado</th><th></th></tr>
+                <tr>
+                  <th style="width:30px;"></th>
+                  <th class="th-ordenable" onclick="ordenarPedidosAdmin('fecha')">Fecha / hora / ruta ${iconoOrdenPedidos("fecha")}</th>
+                  <th class="th-ordenable" onclick="ordenarPedidosAdmin('cliente')">Cliente ${iconoOrdenPedidos("cliente")}</th>
+                  <th class="th-ordenable" onclick="ordenarPedidosAdmin('comuna')">Comuna ${iconoOrdenPedidos("comuna")}</th>
+                  <th class="th-ordenable" onclick="ordenarPedidosAdmin('vendedor')">Vendedor ${iconoOrdenPedidos("vendedor")}</th>
+                  <th>Pago</th>
+                  <th class="th-ordenable" onclick="ordenarPedidosAdmin('total')">Total ${iconoOrdenPedidos("total")}</th>
+                  <th>Productos</th>
+                  <th class="th-ordenable" onclick="ordenarPedidosAdmin('estado')">Estado ${iconoOrdenPedidos("estado")}</th>
+                  <th></th>
+                </tr>
               </thead>
               <tbody>${pedidosRegion.map(filaHtml).join("")}</tbody>
             </table>
@@ -2511,6 +2738,7 @@
     rutaActual = [...(data || []), ...pedidosExtra].slice().sort(comparadorOrdenRutaMapa);
 
     document.getElementById("rutaExportarBtn").style.display = rutaActual.length ? "flex" : "none";
+    document.getElementById("rutaImprimirBtn").style.display = rutaActual.length ? "flex" : "none";
     document.getElementById("rutaMapaBtn").style.display = rutaActual.length ? "flex" : "none";
     document.getElementById("rutaEnviarBtn").style.display = rutaActual.length ? "flex" : "none";
     document.getElementById("rutaEnviarAyuda").style.display = rutaActual.length ? "block" : "none";
@@ -2560,6 +2788,25 @@
         <tbody>${filas}</tbody>
       </table>
     `;
+  }
+
+  function imprimirRuta() {
+    if (!rutaActual.length) return;
+    const contenido = document.getElementById("rutaWrap").innerHTML;
+    const area = document.createElement("div");
+    area.id = "rutaImprimibleArea";
+    area.innerHTML = `
+      <div style="padding:16px;">
+        <h2 style="color:#155724;margin:0 0 2px;">El Pelao Erasmo — Ruta de reparto</h2>
+        <p style="font-size:.82rem;color:#555;margin:0 0 14px;">Impreso: ${new Date().toLocaleString("es-CL")}</p>
+        ${contenido}
+      </div>
+    `;
+    document.body.appendChild(area);
+    document.body.classList.add("modo-impresion-ruta");
+    window.print();
+    document.body.classList.remove("modo-impresion-ruta");
+    area.remove();
   }
 
   function exportarRutaExcel() {
@@ -2752,6 +2999,16 @@
         vendedoresCache.map(v => `<option value="${v.id}">${v.nombre_completo}</option>`).join("") +
         '<option value="__sin_vendedor__">Sin vendedor (venta orgánica)</option>';
       filtroRutaSelect.value = seleccionRutaActual;
+    }
+
+    // Mismo listado, para el filtro de vendedor de "Informes generales de ventas".
+    const filtroInformeGeneralSelect = document.getElementById("informeGeneralVendedor");
+    if (filtroInformeGeneralSelect) {
+      const seleccionInformeActual = filtroInformeGeneralSelect.value;
+      filtroInformeGeneralSelect.innerHTML = '<option value="">Todos los vendedores</option>' +
+        vendedoresCache.map(v => `<option value="${v.id}">${v.nombre_completo}</option>`).join("") +
+        '<option value="__sin_vendedor__">Sin vendedor (venta orgánica)</option>';
+      filtroInformeGeneralSelect.value = seleccionInformeActual;
     }
 
     renderVendedoresAdmin();
@@ -3004,6 +3261,108 @@
     generarInformeSemanalPDF({ pedidos: data, nombreVendedor, desde, hasta });
     status.classList.add("ok");
     status.textContent = `Informe de ${nombreVendedor} descargado (semana ${desde} al ${hasta}).`;
+  }
+
+  // ==========================================================================
+  // Informes generales de ventas — para el dueño: ver y exportar el negocio
+  // completo (o filtrado por vendedor/comuna/región), no solo un vendedor.
+  // ==========================================================================
+  let informeGeneralPedidosCache = [];
+  let informeGeneralRangoCache = { desde: "", hasta: "" };
+  let informeGeneralFiltroTexto = "";
+
+  async function generarInformeGeneralAdmin() {
+    const status = document.getElementById("informeGeneralStatus");
+    const resultado = document.getElementById("informeGeneralResultado");
+    status.className = "status-msg"; status.textContent = "Generando..."; resultado.style.display = "none";
+    const desde = document.getElementById("informeGeneralDesde").value;
+    const hasta = document.getElementById("informeGeneralHasta").value;
+    if (!desde || !hasta) { status.classList.add("error"); status.textContent = "Elige la fecha de inicio y de término del periodo."; return; }
+    if (desde > hasta) { status.classList.add("error"); status.textContent = "La fecha de inicio no puede ser posterior a la de término."; return; }
+    const vendedorFiltro = document.getElementById("informeGeneralVendedor").value;
+    const comunaFiltro = document.getElementById("informeGeneralComuna").value.trim();
+    const regionFiltro = document.getElementById("informeGeneralRegion").value;
+    let query = supa.from("pedidos")
+      .select("id, fecha, nombre_cliente, comuna, region, vendedor_id, cantidad_pipeno, cantidad_granadina, detalle_productos, forma_pago, total, estado")
+      .gte("fecha", desde).lte("fecha", hasta);
+    if (vendedorFiltro === "__sin_vendedor__") query = query.is("vendedor_id", null);
+    else if (vendedorFiltro) query = query.eq("vendedor_id", vendedorFiltro);
+    if (regionFiltro) query = query.eq("region", regionFiltro);
+    if (comunaFiltro) query = query.ilike("comuna", `%${comunaFiltro}%`);
+    const { data, error } = await query.order("fecha", { ascending: true });
+    if (error) { status.classList.add("error"); status.textContent = "No se pudo generar el informe: " + error.message; return; }
+    if (!data || data.length === 0) { status.classList.add("error"); status.textContent = `No hay pedidos entre el ${desde} y el ${hasta} con esos filtros.`; return; }
+    informeGeneralPedidosCache = data;
+    informeGeneralRangoCache = { desde, hasta };
+    const etiquetas = [];
+    if (vendedorFiltro === "__sin_vendedor__") etiquetas.push("sin vendedor");
+    else if (vendedorFiltro) { const v = vendedoresCache.find(x => x.id === vendedorFiltro); etiquetas.push(`vendedor: ${v ? v.nombre_completo : vendedorFiltro}`); }
+    if (regionFiltro) etiquetas.push(regionFiltro);
+    if (comunaFiltro) etiquetas.push(`comuna: "${comunaFiltro}"`);
+    informeGeneralFiltroTexto = etiquetas.join(", ");
+    const vendedoresPorId = {}; vendedoresCache.forEach(v => { vendedoresPorId[v.id] = v.nombre_completo; });
+    const stats = calcularEstadisticasGeneralInforme(data, vendedoresPorId);
+    renderInformeGeneralResultado(stats);
+    status.classList.add("ok");
+    status.textContent = `Listo — ${data.length} pedido(s) entre el ${desde} y el ${hasta}${informeGeneralFiltroTexto ? " (" + informeGeneralFiltroTexto + ")" : ""}.`;
+    resultado.style.display = "block";
+  }
+
+  function renderInformeGeneralResultado(stats) {
+    const kpis = [
+      { num: money(stats.totalEntregado), lbl: `Vendido y entregado (${stats.entregados.length})` },
+      { num: money(stats.totalEnCurso), lbl: `Todavía en curso (${stats.enCurso.length})` },
+      { num: money(stats.ticketPromedio), lbl: "Ticket promedio" },
+      { num: stats.totalPipeno, lbl: "Bidones Pipeño 5L entregados" },
+      { num: stats.totalGranadina, lbl: "Displays Granadina entregados" },
+      { num: stats.rechazados.length, lbl: "Rechazados / reagendados" }
+    ];
+    document.getElementById("informeGeneralKpis").innerHTML = kpis.map(k => `<div class="resumen-card"><div class="num">${k.num}</div><div class="lbl">${k.lbl}</div></div>`).join("");
+
+    const tablaVendedor = document.getElementById("informeGeneralTablaVendedor");
+    tablaVendedor.innerHTML = stats.porVendedor.length ? `
+        <thead><tr><th>Vendedor</th><th>Pedidos</th><th>Total</th></tr></thead>
+        <tbody>${stats.porVendedor.map(v => `<tr><td>${v.nombre}</td><td>${v.cantidad}</td><td style="font-weight:700;">${money(v.total)}</td></tr>`).join("")}</tbody>
+      ` : `<tbody><tr><td class="empty-state">Sin datos.</td></tr></tbody>`;
+
+    const tablaComuna = document.getElementById("informeGeneralTablaComuna");
+    tablaComuna.innerHTML = stats.porComuna.length ? `
+        <thead><tr><th>Comuna</th><th>Pedidos</th><th>Total</th></tr></thead>
+        <tbody>${stats.porComuna.map(c => `<tr><td>${c.nombre}</td><td>${c.cantidad}</td><td style="font-weight:700;">${money(c.total)}</td></tr>`).join("")}</tbody>
+      ` : `<tbody><tr><td class="empty-state">Sin datos.</td></tr></tbody>`;
+  }
+
+  function descargarInformeGeneralPDF() {
+    if (!informeGeneralPedidosCache.length) return;
+    const vendedoresPorId = {}; vendedoresCache.forEach(v => { vendedoresPorId[v.id] = v.nombre_completo; });
+    generarInformeGeneralPDF({
+      pedidos: informeGeneralPedidosCache,
+      vendedoresPorId,
+      desde: informeGeneralRangoCache.desde,
+      hasta: informeGeneralRangoCache.hasta,
+      filtroDescripcion: informeGeneralFiltroTexto
+    });
+  }
+
+  function descargarInformeGeneralExcel() {
+    if (!informeGeneralPedidosCache.length) return;
+    const vendedoresPorId = {}; vendedoresCache.forEach(v => { vendedoresPorId[v.id] = v.nombre_completo; });
+    const filas = informeGeneralPedidosCache.map(p => ({
+      "Fecha": p.fecha,
+      "Cliente": p.nombre_cliente,
+      "Comuna": p.comuna,
+      "Región": p.region,
+      "Vendedor": p.vendedor_id ? (vendedoresPorId[p.vendedor_id] || "—") : "Sin vendedor",
+      "Cant. Pipeño": p.cantidad_pipeno,
+      "Cant. Granadina": p.cantidad_granadina,
+      "Forma de pago": p.forma_pago,
+      "Total": p.total,
+      "Estado": ESTADO_LABEL[p.estado] || p.estado
+    }));
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Informe general");
+    XLSX.writeFile(libro, `informe-general-ventas-${informeGeneralRangoCache.desde}-a-${informeGeneralRangoCache.hasta}.xlsx`);
   }
 
   function marcarCambioVendedor(id, campo, valor) {
