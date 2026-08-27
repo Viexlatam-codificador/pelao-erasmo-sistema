@@ -152,6 +152,58 @@ table.orders th{
   font-size:.9rem;
   padding:20px 0;
 }
+
+/* ============================================================================
+   Tabla de Pedidos (admin) — más aire entre filas, franjas alternadas y
+   encabezados que se pueden tocar para ordenar, para que se lea de un
+   vistazo en vez de todo apretado en una sola masa de texto.
+   ============================================================================ */
+.pedidos-tabla th, .pedidos-tabla td{
+  padding:11px 8px;
+  vertical-align:top;
+}
+.pedidos-tabla tbody tr:nth-child(even){ background:#fafaf6; }
+.pedidos-tabla tbody tr:hover{ background:#f0f5ee; }
+.pedidos-tabla th.th-ordenable{
+  cursor:pointer;
+  user-select:none;
+  white-space:nowrap;
+}
+.pedidos-tabla th.th-ordenable:hover{ color:var(--verde-oscuro); }
+.orden-flecha{ color:#bbb; font-weight:400; margin-left:2px; }
+.orden-flecha.activa{ color:var(--verde-oscuro); font-weight:800; }
+
+.celda-productos{ min-width:170px; max-width:220px; }
+.chip-producto{
+  display:inline-block;
+  background:#eef3ea;
+  color:#3c5c3f;
+  border-radius:6px;
+  padding:2px 7px;
+  font-size:.7rem;
+  font-weight:600;
+  margin:0 4px 4px 0;
+  white-space:nowrap;
+}
+
+.select-estado{
+  border:none;
+  border-radius:14px;
+  padding:5px 8px;
+  font-size:.72rem;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.3px;
+  min-width:132px;
+  cursor:pointer;
+}
+.select-estado.badge-pendiente{background:#fff3cd;color:#7a5b00;}
+.select-estado.badge-preparacion{background:#dbe9ff;color:#12408a;}
+.select-estado.badge-listo_despacho{background:#e6d9ff;color:#4a1f9e;}
+.select-estado.badge-en_ruta{background:#ffe3c2;color:#8a4b00;}
+.select-estado.badge-entregado{background:#d9f3e0;color:var(--verde-oscuro);}
+.select-estado.badge-anulado{background:#f2d4d1;color:var(--rojo);}
+.select-estado.badge-rechazado{background:#fdecea;color:#c62828;}
 .login-wrap{
   min-height:100vh;
   display:flex;
