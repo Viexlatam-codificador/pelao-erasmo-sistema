@@ -220,6 +220,9 @@
         const { error } = await supa.from(fila.tabla).update(item.datos).eq("id", item.id);
         if (error) throw error;
       }
+    } else if (accion === "upsert") {
+      const { error } = await supa.from(fila.tabla).upsert(p.datos, p.onConflict ? { onConflict: p.onConflict } : undefined);
+      if (error) throw error;
     } else if (accion === "fetch") {
       const { data: sd } = await supa.auth.getSession();
       const token = sd && sd.session ? sd.session.access_token : null;
