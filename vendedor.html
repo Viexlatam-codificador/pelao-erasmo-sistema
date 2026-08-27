@@ -361,12 +361,29 @@
     document.getElementById("informeFechaVendedor").value = new Date().toISOString().slice(0, 10);
     document.getElementById("informeMesVendedor").value = new Date().toISOString().slice(0, 7);
     document.getElementById("fechaPedido").value = new Date().toISOString().slice(0, 10);
+    cargarPreciosProductos();
     cargarMisPedidos();
     cargarComunas();
     cargarAlertasAtencion();
     verMisEstadisticas();
     inicializarBotonHistorial("vendedor");
   });
+
+  // Trae los precios de Pipeño 5L (por tramos) y Granadina que dejó el admin
+  // guardados — si todavía no ha guardado ninguno, se usan los valores de
+  // respaldo de pricing.js tal cual.
+  async function cargarPreciosProductos() {
+    const { data } = await supa
+      .from("configuraciones")
+      .select("clave, valor")
+      .in("clave", ["pricing_tiers", "precio_granadina"]);
+    const filaTiers = (data || []).find(r => r.clave === "pricing_tiers");
+    const filaGranadina = (data || []).find(r => r.clave === "precio_granadina");
+    aplicarPrecios({
+      pricing_tiers: filaTiers ? filaTiers.valor : null,
+      precio_granadina: filaGranadina ? filaGranadina.valor : null
+    });
+  }
 
   function escAttr(str) {
     return String(str || "")
@@ -464,7 +481,7 @@
     const wrap = document.getElementById("comunasWrap");
     const { data, error } = await supa
       .from("comunas_rutas")
-      .select("comuna, region, dia_reparto, precio_despacho, activa")
+      .select("comuna, region, dia_reparto, precio_despacho, activa, envio_gratis_defecto")
       .order("comuna", { ascending: true });
 
     if (error || !data) {
@@ -544,7 +561,14 @@
       document.getElementById("fechaPedido").value = fecha;
       status.classList.add("ok");
       status.textContent = `Sugerido: ${DIA_LABEL[info.dia_reparto] || info.dia_reparto} ${fecha} (día habitual de reparto en ${comuna}).`;
-      if (info.precio_despacho != null && !document.getElementById("envioGratis").checked) {
+      // Si la comuna tiene marcado "envío gratis" por defecto (lo activa el
+      // admin), se sugiere de entrada acá — el vendedor igual puede
+      // desmarcarlo a mano si este pedido en particular no aplica.
+      if (info.envio_gratis_defecto && !document.getElementById("envioGratis").checked) {
+        document.getElementById("envioGratis").checked = true;
+        onCambioEnvioGratis();
+        status.textContent += " Esta comuna tiene envío gratis por defecto (puedes desmarcarlo si no aplica).";
+      } else if (info.precio_despacho != null && !document.getElementById("envioGratis").checked) {
         document.getElementById("montoDelivery").value = info.precio_despacho;
         actualizarTotales();
       }
