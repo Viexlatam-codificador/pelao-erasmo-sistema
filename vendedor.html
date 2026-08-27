@@ -76,9 +76,21 @@
   details.grupo-desplegable summary::after{ content:"▸"; transition:transform .15s; color:#888; }
   details.grupo-desplegable[open] summary::after{ transform:rotate(90deg); }
   details.grupo-desplegable summary .grupo-conteo{ font-weight:400; color:#888; font-size:.75rem; white-space:nowrap; }
-  details.grupo-desplegable .grupo-contenido{ padding:10px; }
+  /* overflow-x:auto acá es la salvedad: si la pantalla queda angosta (celu,
+     ventana dividida, etc.) la tabla se desliza de lado en vez de recortar
+     columnas o botones — antes el "overflow:hidden" de arriba los cortaba. */
+  details.grupo-desplegable .grupo-contenido{ padding:10px; overflow-x:auto; }
   details.grupo-desplegable table.orders{ margin:0; }
   .icono-atencion-pedido{ color:var(--rojo); font-size:.85rem; margin-left:4px; }
+  /* Botones de acción compactos para la tabla de "Mis pedidos" — íconos
+     cuadrados chicos que se envuelven en la celda en vez de exigir 120px
+     de ancho mínimo cada uno (eso era lo que forzaba el corte). */
+  .acciones-mini{ display:flex; flex-wrap:wrap; gap:6px; }
+  .acciones-mini a, .acciones-mini button{
+    flex:0 0 auto; min-width:0; width:34px; height:34px; padding:0;
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:8px; font-size:.95rem; border:none; cursor:pointer; text-decoration:none;
+  }
 </style>
 </head>
 <body>
@@ -1164,7 +1176,7 @@
           <td>${p.dia_reparto === "sin_asignar" ? "Sin ruta" : (p.dia_reparto || "-")}</td>
           <td>${money(p.total)}</td>
           <td>
-            <div class="stop-actions" style="justify-content:flex-start;flex-wrap:nowrap;">
+            <div class="acciones-mini">
               <a class="stop-btn-llamar" href="tel:${p.telefono}" title="Llamar">📞</a>
               ${telWsp ? `<button type="button" class="stop-btn-whatsapp" title="WhatsApp" onclick="toggleWhatsAppPlantillas('${p.id}')">💬</button>` : ""}
               <button type="button" class="stop-btn-maps" title="Enviar cotización al cliente" onclick="toggleCotizacionGuardada('${p.id}')">🧾</button>
