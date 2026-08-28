@@ -1814,12 +1814,18 @@
     }
 
     const s = calcularEstadisticasInforme(data);
+    const comisionPipeno = s.totalPipeno * COMISION_PIPENO;
+    const comisionGranadina = s.totalGranadina * COMISION_GRANADINA;
+    const comisionTotal = comisionPipeno + comisionGranadina;
     wrap.innerHTML = `
       <div class="stats-grid">
         <div class="stat-box"><span class="stat-num">${moneyInforme(s.totalEntregado)}</span><span class="stat-label">Vendido y entregado</span></div>
         <div class="stat-box"><span class="stat-num">${s.entregados.length}</span><span class="stat-label">Pedidos entregados</span></div>
         <div class="stat-box"><span class="stat-num">${moneyInforme(s.ticketPromedio)}</span><span class="stat-label">Ticket promedio</span></div>
         <div class="stat-box"><span class="stat-num">${s.comunaTop || "-"}</span><span class="stat-label">Comuna donde más vendes</span></div>
+        <div class="stat-box"><span class="stat-num">${s.totalPipeno} × $100</span><span class="stat-label">Comisión Pipeño (${moneyInforme(comisionPipeno)})</span></div>
+        <div class="stat-box"><span class="stat-num">${s.totalGranadina} × $300</span><span class="stat-label">Comisión Granadina (${moneyInforme(comisionGranadina)})</span></div>
+        <div class="stat-box" style="grid-column:1 / -1;background:#eaf4ea;"><span class="stat-num" style="color:var(--verde-oscuro);">${moneyInforme(comisionTotal)}</span><span class="stat-label">Tu comisión total de este periodo</span></div>
       </div>
     `;
   }
