@@ -236,11 +236,24 @@ function calcularEstadisticasGeneralInforme(pedidos, vendedoresPorId) {
   const totalesPorVendedor = {};
   base.entregados.forEach((p) => {
     const nombre = p.vendedor_id ? ((vendedoresPorId || {})[p.vendedor_id] || "—") : "Sin vendedor";
-    if (!totalesPorVendedor[nombre]) totalesPorVendedor[nombre] = { nombre, cantidad: 0, total: 0 };
+    if (!totalesPorVendedor[nombre]) totalesPorVendedor[nombre] = { nombre, cantidad: 0, total: 0, pipeno: 0, granadina: 0 };
     totalesPorVendedor[nombre].cantidad++;
     totalesPorVendedor[nombre].total += p.total || 0;
+    totalesPorVendedor[nombre].pipeno += p.cantidad_pipeno || 0;
+    totalesPorVendedor[nombre].granadina += p.cantidad_granadina || 0;
   });
-  const porVendedor = Object.values(totalesPorVendedor).sort((a, b) => b.total - a.total);
+  // Comisión fija por unidad entregada ($100 Pipeño / $300 Granadina) — se
+  // calcula acá mismo para que tanto el PDF como la pantalla del admin
+  // muestren siempre el mismo número.
+  const porVendedor = Object.values(totalesPorVendedor).map(v => {
+    const comisionPipeno = v.pipeno * COMISION_PIPENO;
+    const comisionGranadina = v.granadina * COMISION_GRANADINA;
+    return Object.assign({}, v, {
+      comisionPipeno, comisionGranadina,
+      comisionTotal: comisionPipeno + comisionGranadina
+    });
+  }).sort((a, b) => b.total - a.total);
+  const comisionTotalGeneral = porVendedor.reduce((s, v) => s + v.comisionTotal, 0);
 
   const totalesPorComuna = {};
   base.entregados.forEach((p) => {
@@ -260,7 +273,7 @@ function calcularEstadisticasGeneralInforme(pedidos, vendedoresPorId) {
     .map(([forma, total]) => ({ forma, total }))
     .sort((a, b) => b.total - a.total);
 
-  return Object.assign({}, base, { porVendedor, porComuna, porFormaPago });
+  return Object.assign({}, base, { porVendedor, porComuna, porFormaPago, comisionTotalGeneral });
 }
 
 // PDF con el resumen general del negocio (no de un solo vendedor): KPIs +
