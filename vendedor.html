@@ -1136,7 +1136,12 @@
   // MIS PEDIDOS (listado + editar propios + llamar/whatsapp)
   // ==========================================================================
   function filaEditable(p) {
-    return p.estado === "pendiente" || p.estado === "preparacion" || p.estado === "rechazado";
+    // Antes se cerraba en cuanto quedaba "listo p/despacho" y el vendedor ya
+    // no podía tocarlo — eso obligaba a pedirle el cambio al admin por
+    // cualquier cosa. Se deja editable hasta que sale a reparto de verdad
+    // (en_ruta/entregado/anulado sí quedan bloqueados, para no pisar lo que
+    // ya está en la calle).
+    return p.estado === "pendiente" || p.estado === "preparacion" || p.estado === "rechazado" || p.estado === "listo_despacho";
   }
 
   // Orden en que aparecen las pestañas — primero lo que necesita más
