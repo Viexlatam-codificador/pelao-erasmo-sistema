@@ -30,6 +30,12 @@ const PRICING = {
 let GRANADINA_PRICE = 22000;
 const DEFAULT_DELIVERY_RM = 3000;
 
+// Comisión que gana el vendedor por unidad vendida (fija, no depende de la
+// región ni del precio de venta): $100 por cada Pipeño 5L y $300 por cada
+// display de Granadina entregado.
+const COMISION_PIPENO = 100;
+const COMISION_GRANADINA = 300;
+
 // Estos valores de arriba son solo el respaldo inicial (por si falla la
 // carga desde la base de datos). La fuente real de verdad son las filas
 // 'pricing_tiers' y 'precio_granadina' de la tabla `configuraciones`, que
@@ -103,7 +109,7 @@ function calcularPedido({ regionKey, cantidadPipeno, cantidadGranadina, comunaPr
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    PRICING, DEFAULT_DELIVERY_RM,
+    PRICING, DEFAULT_DELIVERY_RM, COMISION_PIPENO, COMISION_GRANADINA,
     regionKeyFromLabel, tierFor, money, normalizeComuna, calcularPedido, aplicarPrecios
   };
   // GRANADINA_PRICE es un número (no un objeto), así que si se exportara
