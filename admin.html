@@ -2009,10 +2009,13 @@
     const ids = Array.from(pedidosSeleccionados);
     const fechasAnteriores = ids.map(id => {
       const p = pedidosCache.find(x => x.id === id);
-      return { id, fecha: p ? p.fecha : null };
+      return { id, fecha: p ? p.fecha : null, dia_reparto: p ? p.dia_reparto : null };
     }).filter(x => x.fecha);
+    // Mismo día de la semana para todos los seleccionados, calculado una
+    // sola vez a partir de la fecha nueva elegida.
+    const diaNuevo = diaSemanaDeFecha(nuevaFecha);
 
-    const { error } = await supa.from("pedidos").update({ fecha: nuevaFecha }).in("id", ids);
+    const { error } = await supa.from("pedidos").update({ fecha: nuevaFecha, dia_reparto: diaNuevo }).in("id", ids);
 
     if (error) {
       status.classList.add("error");
@@ -2027,14 +2030,14 @@
     if (fechasAnteriores.length) {
       deshacerConHistorial(`Fecha aplicada a ${fechasAnteriores.length} pedido${fechasAnteriores.length === 1 ? "" : "s"}`, async () => {
         for (const item of fechasAnteriores) {
-          const { error: e2 } = await supa.from("pedidos").update({ fecha: item.fecha }).eq("id", item.id);
+          const { error: e2 } = await supa.from("pedidos").update({ fecha: item.fecha, dia_reparto: item.dia_reparto }).eq("id", item.id);
           if (e2) throw e2;
         }
         await cargarPedidosAdmin();
         cargarResumenPedidos();
       }, {
         pagina: "admin", accion: "update_lote", tabla: "pedidos",
-        payload: { items: fechasAnteriores.map(item => ({ id: item.id, datos: { fecha: item.fecha } })) },
+        payload: { items: fechasAnteriores.map(item => ({ id: item.id, datos: { fecha: item.fecha, dia_reparto: item.dia_reparto } })) },
         creadoPor: perfilActual ? perfilActual.nombre_completo : null
       }, 10);
     }
@@ -2354,21 +2357,27 @@
     if (!nuevaFecha) return;
     const p = pedidosCache.find(x => x.id === id);
     const fechaAnterior = p ? p.fecha : null;
-    const { error } = await supa.from("pedidos").update({ fecha: nuevaFecha }).eq("id", id);
+    const diaAnterior = p ? p.dia_reparto : null;
+    // Si se cambia la fecha a mano acá, el día de la semana (dia_reparto)
+    // tiene que recalcularse también — si no, el pedido queda mostrando el
+    // día viejo y termina en la ruta que no corresponde.
+    const diaNuevo = diaSemanaDeFecha(nuevaFecha);
+    const { error } = await supa.from("pedidos").update({ fecha: nuevaFecha, dia_reparto: diaNuevo }).eq("id", id);
     if (error) { alert("No se pudo cambiar la fecha: " + error.message); cargarPedidosAdmin(); return; }
-    if (p) p.fecha = nuevaFecha;
+    if (p) { p.fecha = nuevaFecha; p.dia_reparto = diaNuevo; }
+    renderPedidosAdmin();
     cargarResumenPedidos();
     if (fechaAnterior && fechaAnterior !== nuevaFecha) {
       deshacerConHistorial("Fecha del pedido cambiada", async () => {
-        const { error: e2 } = await supa.from("pedidos").update({ fecha: fechaAnterior }).eq("id", id);
+        const { error: e2 } = await supa.from("pedidos").update({ fecha: fechaAnterior, dia_reparto: diaAnterior }).eq("id", id);
         if (e2) throw e2;
         const p2 = pedidosCache.find(x => x.id === id);
-        if (p2) p2.fecha = fechaAnterior;
+        if (p2) { p2.fecha = fechaAnterior; p2.dia_reparto = diaAnterior; }
         renderPedidosAdmin();
         cargarResumenPedidos();
       }, {
         pagina: "admin", pedidoId: id, accion: "update", tabla: "pedidos",
-        payload: { campo: "id", valor: id, datos: { fecha: fechaAnterior } },
+        payload: { campo: "id", valor: id, datos: { fecha: fechaAnterior, dia_reparto: diaAnterior } },
         creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
