@@ -129,12 +129,6 @@
       Nuevo pedido
     </h2>
 
-    <label>Región <span style="color:var(--rojo);">*</span></label>
-    <select id="region">
-      <option value="rm">Región Metropolitana</option>
-      <option value="vr">V Región</option>
-    </select>
-
     <label>Nombre cliente <span style="color:var(--rojo);">*</span></label>
     <input type="text" id="nombreCliente">
 
@@ -156,8 +150,16 @@
     </div>
 
     <label>Comuna <span style="color:var(--rojo);">*</span></label>
-    <input type="text" id="comuna" placeholder="Ej: Providencia" onblur="sugerirFechaSegunComuna()">
+    <input type="text" id="comuna" list="comunasDatalist" placeholder="Empieza a escribir para ver la lista..." onblur="sugerirFechaSegunComuna()">
+    <datalist id="comunasDatalist"></datalist>
     <p class="status-msg" id="sugerenciaDiaTexto" style="margin-top:2px;min-height:auto;"></p>
+
+    <label>Región <span style="color:var(--rojo);">*</span></label>
+    <select id="region">
+      <option value="rm">Región Metropolitana</option>
+      <option value="vr">V Región</option>
+    </select>
+    <p style="font-size:.72rem;color:#888;margin-top:2px;">Se completa sola según la comuna que elegiste arriba — solo cámbiala a mano si es una comuna nueva que todavía no está en el listado.</p>
 
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
@@ -505,6 +507,18 @@
     comunasCache = {};
     data.forEach(c => { comunasCache[normalizeComuna(c.comuna)] = c; });
 
+    // Lista real de comunas para escribir en el campo del pedido — ordenada
+    // por región (RM primero, V Región después) para que quede clara la
+    // diferencia entre ambas al elegir. Solo las disponibles.
+    const datalist = document.getElementById("comunasDatalist");
+    if (datalist) {
+      const ordenadas = comunasListaCache
+        .filter(c => c.activa !== false)
+        .slice()
+        .sort((a, b) => ordenRegionVendedor(a.region) - ordenRegionVendedor(b.region) || a.comuna.localeCompare(b.comuna));
+      datalist.innerHTML = ordenadas.map(c => `<option value="${escAttr(c.comuna)}">${escAttr(c.region)}</option>`).join("");
+    }
+
     renderComunasFiltradas();
   }
 
@@ -563,6 +577,16 @@
     const status = document.getElementById("sugerenciaDiaTexto");
     status.className = "status-msg";
     if (!comuna) { status.textContent = ""; return; }
+    // La región se autocompleta según la comuna elegida — antes había que
+    // acordarse de cambiarla a mano arriba, y quedaba fácil mezclar los
+    // tramos de precio de RM con los de la V Región por error.
+    if (info && info.region) {
+      const regionDetectada = regionKeyFromLabel(info.region);
+      if (document.getElementById("region").value !== regionDetectada) {
+        document.getElementById("region").value = regionDetectada;
+        actualizarTotales();
+      }
+    }
     if (!info || !info.dia_reparto || info.dia_reparto === "sin_asignar") {
       status.classList.add("error");
       status.textContent = "No hay día de reparto asignado todavía para esa comuna.";
@@ -1067,6 +1091,12 @@
       status.classList.add("error");
       status.textContent = "Completa nombre, teléfono, dirección, número y comuna.";
       return;
+    }
+    const infoComunaElegida = comunasCache[normalizeComuna(comuna)];
+    if (infoComunaElegida && infoComunaElegida.region && regionKeyFromLabel(infoComunaElegida.region) !== regionKey) {
+      if (!confirm(`"${comuna}" está registrada en ${infoComunaElegida.region}, pero elegiste ${region.label}. ¿Continuar de todos modos?`)) {
+        return;
+      }
     }
     if (cantidadPipeno === 0 && cantidadGranadina === 0 && !productosExtraCache.length) {
       status.classList.add("error");
