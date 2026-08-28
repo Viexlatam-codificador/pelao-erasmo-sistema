@@ -53,7 +53,10 @@
   details.region-grupo summary::after{ content:"▸"; transition:transform .15s; color:#888; }
   details.region-grupo[open] summary::after{ transform:rotate(90deg); }
   details.region-grupo summary .region-conteo{ font-weight:400; color:#888; font-size:.75rem; }
-  details.region-grupo .region-contenido{ padding:10px; }
+  /* overflow-x:auto acá es la salvedad: si la tabla (Comunas o Pedidos) es
+     más ancha que la pantalla, antes el "overflow:hidden" de arriba
+     recortaba columnas y botones enteros en vez de dejarlos deslizar. */
+  details.region-grupo .region-contenido{ padding:10px; overflow-x:auto; }
   details.region-grupo table.orders{ margin:0; }
 
   /* Modal de "Ver / Editar pedido" — se abre encima de todo, así la lista de
