@@ -163,8 +163,8 @@
 
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
-        <label>Fecha de entrega</label>
-        <input type="date" id="fechaPedido">
+        <label>Fecha de entrega <span style="color:var(--rojo);">*</span></label>
+        <input type="date" id="fechaPedido" required>
         <div style="display:flex;gap:6px;margin-top:6px;">
           <button type="button" class="btn btn-secondary" style="padding:6px 4px;font-size:.7rem;flex:1;" onclick="elegirFechaRapida('hoy')">Hoy</button>
           <button type="button" class="btn btn-secondary" style="padding:6px 4px;font-size:.7rem;flex:1;" onclick="elegirFechaRapida('manana')">Mañana</button>
@@ -354,6 +354,7 @@
 
   let perfilActual = null;
   let comunasCache = {};
+  let promoEnvioGratisHasta = null;
   let misPedidosCache = [];
   let pedidosAtencion = [];
   let productosExtraCache = [];
@@ -390,9 +391,11 @@
     const { data } = await supa
       .from("configuraciones")
       .select("clave, valor")
-      .in("clave", ["pricing_tiers", "precio_granadina"]);
+      .in("clave", ["pricing_tiers", "precio_granadina", "envio_gratis_promo_hasta"]);
     const filaTiers = (data || []).find(r => r.clave === "pricing_tiers");
     const filaGranadina = (data || []).find(r => r.clave === "precio_granadina");
+    const filaPromo = (data || []).find(r => r.clave === "envio_gratis_promo_hasta");
+    promoEnvioGratisHasta = filaPromo ? filaPromo.valor : null;
     aplicarPrecios({
       pricing_tiers: filaTiers ? filaTiers.valor : null,
       precio_granadina: filaGranadina ? filaGranadina.valor : null
@@ -495,7 +498,7 @@
     const wrap = document.getElementById("comunasWrap");
     const { data, error } = await supa
       .from("comunas_rutas")
-      .select("comuna, region, dia_reparto, precio_despacho, activa, envio_gratis_defecto")
+      .select("comuna, region, dia_reparto, dia_reparto_2, precio_despacho, activa, envio_gratis_defecto")
       .order("comuna", { ascending: true });
 
     if (error || !data) {
@@ -543,7 +546,7 @@
       const filas = comunasRegion.map(c => `
         <tr>
           <td>${c.comuna}</td>
-          <td>${c.activa === false ? '<span class="badge badge-anulado">No disponible</span>' : (DIA_LABEL[c.dia_reparto] || c.dia_reparto || "-")}</td>
+          <td>${c.activa === false ? '<span class="badge badge-anulado">No disponible</span>' : ([c.dia_reparto, c.dia_reparto_2].filter(Boolean).map(d => DIA_LABEL[d] || d).join(" y ") || "-")}</td>
           <td>${c.precio_despacho != null ? money(c.precio_despacho) : "-"}</td>
         </tr>
       `).join("");
@@ -552,7 +555,7 @@
           <summary>${region} <span class="grupo-conteo">${comunasRegion.length} comuna${comunasRegion.length === 1 ? "" : "s"}</span></summary>
           <div class="grupo-contenido">
             <table class="orders">
-              <thead><tr><th>Comuna</th><th>Día de reparto</th><th>Despacho</th></tr></thead>
+              <thead><tr><th>Comuna</th><th>Días de reparto</th><th>Despacho</th></tr></thead>
               <tbody>${filas}</tbody>
             </table>
           </div>
@@ -571,6 +574,67 @@
     return resultado.toISOString().slice(0, 10);
   }
 
+  // Día de la semana (clave interna) para una fecha "YYYY-MM-DD".
+  function diaSemanaDeFechaVendedor(fechaStr) {
+    const dias = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+    const [y, m, d] = fechaStr.split("-").map(Number);
+    return dias[new Date(y, m - 1, d).getDay()];
+  }
+
+  // Próxima fecha (la más cercana desde hoy) que caiga en cualquiera de los
+  // días dados — las comunas ahora tienen 2 días de reparto a la semana, así
+  // que se sugiere el más próximo de los dos.
+  function proximaFechaEntreDias(dias) {
+    const candidatos = dias.filter(Boolean).map(d => proximaFechaParaDia(d)).filter(Boolean);
+    if (!candidatos.length) return null;
+    candidatos.sort();
+    return candidatos[0];
+  }
+
+  // Decide si corresponde envío gratis según la fecha elegida: solo aplica
+  // si la fecha cae en uno de los días de ruta de la comuna Y la promoción
+  // sigue vigente (envio_gratis_promo_hasta). Si no se cumple, se deja el
+  // despacho normal de la comuna. Se llama cada vez que cambia la comuna o
+  // la fecha del pedido.
+  function aplicarReglaEnvioSegunFechaYComuna() {
+    const comuna = document.getElementById("comuna").value.trim();
+    const info = comunasCache[normalizeComuna(comuna)];
+    const fecha = document.getElementById("fechaPedido").value;
+    const status = document.getElementById("sugerenciaDiaTexto");
+    if (!info || !fecha) return;
+
+    const diasComuna = [info.dia_reparto, info.dia_reparto_2].filter(Boolean);
+    const diaElegido = diaSemanaDeFechaVendedor(fecha);
+    const cayeEnDiaDeRuta = diasComuna.includes(diaElegido);
+    const promoVigente = !promoEnvioGratisHasta || fecha <= promoEnvioGratisHasta;
+    const aplicaGratis = !!info.envio_gratis_defecto && cayeEnDiaDeRuta && promoVigente;
+
+    if (aplicaGratis) {
+      if (!document.getElementById("envioGratis").checked) {
+        document.getElementById("envioGratis").checked = true;
+        onCambioEnvioGratis();
+      }
+      if (status) {
+        status.classList.add("ok");
+        status.textContent += ` Envío gratis 🎁 (cae en día de ruta de ${comuna}${promoEnvioGratisHasta ? ", promo hasta " + promoEnvioGratisHasta : ""}).`;
+      }
+    } else {
+      if (document.getElementById("envioGratis").checked) {
+        document.getElementById("envioGratis").checked = false;
+        onCambioEnvioGratis();
+      }
+      if (info.precio_despacho != null) {
+        document.getElementById("montoDelivery").value = info.precio_despacho;
+        actualizarTotales();
+      }
+      if (status && info.envio_gratis_defecto && !cayeEnDiaDeRuta) {
+        status.textContent += ` Ojo: esta fecha no cae en el día de ruta de ${comuna}, se cobra despacho normal (usa "Según comuna" para la fecha con envío gratis).`;
+      } else if (status && info.envio_gratis_defecto && !promoVigente) {
+        status.textContent += ` Ojo: la promo de envío gratis ya venció (hasta ${promoEnvioGratisHasta}), se cobra despacho normal.`;
+      }
+    }
+  }
+
   function sugerirFechaSegunComuna() {
     const comuna = document.getElementById("comuna").value.trim();
     const info = comunasCache[normalizeComuna(comuna)];
@@ -587,27 +651,21 @@
         actualizarTotales();
       }
     }
-    if (!info || !info.dia_reparto || info.dia_reparto === "sin_asignar") {
+    if (!info || (!info.dia_reparto && !info.dia_reparto_2) || info.dia_reparto === "sin_asignar") {
       status.classList.add("error");
       status.textContent = "No hay día de reparto asignado todavía para esa comuna.";
       return;
     }
-    const fecha = proximaFechaParaDia(info.dia_reparto);
+    const diasComuna = [info.dia_reparto, info.dia_reparto_2].filter(Boolean);
+    const fecha = proximaFechaEntreDias(diasComuna);
     if (fecha) {
       document.getElementById("fechaPedido").value = fecha;
+      const etiquetasDias = diasComuna.map(d => DIA_LABEL[d] || d).join(" y ");
       status.classList.add("ok");
-      status.textContent = `Sugerido: ${DIA_LABEL[info.dia_reparto] || info.dia_reparto} ${fecha} (día habitual de reparto en ${comuna}).`;
-      // Si la comuna tiene marcado "envío gratis" por defecto (lo activa el
-      // admin), se sugiere de entrada acá — el vendedor igual puede
-      // desmarcarlo a mano si este pedido en particular no aplica.
-      if (info.envio_gratis_defecto && !document.getElementById("envioGratis").checked) {
-        document.getElementById("envioGratis").checked = true;
-        onCambioEnvioGratis();
-        status.textContent += " Esta comuna tiene envío gratis por defecto (puedes desmarcarlo si no aplica).";
-      } else if (info.precio_despacho != null && !document.getElementById("envioGratis").checked) {
-        document.getElementById("montoDelivery").value = info.precio_despacho;
-        actualizarTotales();
-      }
+      status.textContent = `Sugerido: ${fecha} (días habituales de reparto en ${comuna}: ${etiquetasDias}).`;
+      // El envío gratis (si corresponde) se decide según si esta fecha cae
+      // justo en un día de ruta y si la promo sigue vigente.
+      aplicarReglaEnvioSegunFechaYComuna();
     }
   }
 
@@ -726,6 +784,11 @@
     document.getElementById(id).addEventListener("change", actualizarTotales);
   });
   actualizarTotales();
+
+  // Si el vendedor cambia la fecha a mano (sin usar el botón "Según
+  // comuna"), igual hay que revisar si esa fecha sigue calzando con el día
+  // de ruta de la comuna para saber si corresponde envío gratis.
+  document.getElementById("fechaPedido").addEventListener("change", aplicarReglaEnvioSegunFechaYComuna);
 
   // ==========================================================================
   // MINI COTIZACIÓN
@@ -1090,6 +1153,12 @@
     if (!nombreCliente || !telefono || !direccion || !numero || !comuna) {
       status.classList.add("error");
       status.textContent = "Completa nombre, teléfono, dirección, número y comuna.";
+      return;
+    }
+    if (!fechaPedido) {
+      status.classList.add("error");
+      status.textContent = "Elige la fecha exacta en que el cliente necesita la entrega.";
+      document.getElementById("fechaPedido").focus();
       return;
     }
     const infoComunaElegida = comunasCache[normalizeComuna(comuna)];
