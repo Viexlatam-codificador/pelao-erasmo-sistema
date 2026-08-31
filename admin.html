@@ -406,8 +406,22 @@
       <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 8px;" id="loteComunasTitulo">0 comunas seleccionadas</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
         <div style="flex:1;min-width:140px;">
-          <label style="margin:0;">Día de reparto</label>
+          <label style="margin:0;">1er día</label>
           <select id="loteComunasDia">
+            <option value="">— sin cambiar —</option>
+            <option value="">Sin asignar</option>
+            <option value="lunes">Lunes</option>
+            <option value="martes">Martes</option>
+            <option value="miercoles">Miércoles</option>
+            <option value="jueves">Jueves</option>
+            <option value="viernes">Viernes</option>
+            <option value="sabado">Sábado</option>
+            <option value="domingo">Domingo</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:140px;">
+          <label style="margin:0;">2do día</label>
+          <select id="loteComunasDia2">
             <option value="">— sin cambiar —</option>
             <option value="">Sin asignar</option>
             <option value="lunes">Lunes</option>
@@ -855,7 +869,7 @@
   async function cargarComunasAdmin() {
     const { data, error } = await supa
       .from("comunas_rutas")
-      .select("id, comuna, region, dia_reparto, precio_despacho, activa, envio_gratis_defecto")
+      .select("id, comuna, region, dia_reparto, dia_reparto_2, precio_despacho, activa, envio_gratis_defecto")
       .order("comuna", { ascending: true });
 
     if (error) {
@@ -983,6 +997,11 @@
           </select>
         </td>
         <td>
+          <select onchange="marcarCambio('${c.id}','dia_reparto_2', this.value)" title="Segundo día de reparto de la semana (opcional)">
+            ${opcionesDia(c.dia_reparto_2)}
+          </select>
+        </td>
+        <td>
           <input type="number" value="${c.precio_despacho ?? ""}" placeholder="3000"
             onchange="marcarCambio('${c.id}','precio_despacho', this.value === '' ? null : parseInt(this.value,10))">
         </td>
@@ -1011,7 +1030,7 @@
           <div class="region-contenido">
             <table class="orders comunas">
               <thead>
-                <tr><th style="width:34px;"></th><th>Comuna</th><th>Día de reparto</th><th>Despacho ($)</th><th>Disponibilidad</th><th>Envío gratis</th></tr>
+                <tr><th style="width:34px;"></th><th>Comuna</th><th>1er día</th><th>2do día</th><th>Despacho ($)</th><th>Disponibilidad</th><th>Envío gratis</th></tr>
               </thead>
               <tbody>${comunasRegion.map(filaHtml).join("")}</tbody>
             </table>
@@ -1057,17 +1076,20 @@
     if (comunasSeleccionadas.size === 0) return;
     const dia = document.getElementById("loteComunasDia").value;
     const diaTocado = document.getElementById("loteComunasDia").selectedIndex > 0;
+    const dia2 = document.getElementById("loteComunasDia2").value;
+    const dia2Tocado = document.getElementById("loteComunasDia2").selectedIndex > 0;
     const precioRaw = document.getElementById("loteComunasPrecio").value;
     const disponibilidad = document.getElementById("loteComunasDisponibilidad").value;
     const envioGratisLote = document.getElementById("loteComunasEnvioGratis").value;
 
-    if (!diaTocado && precioRaw === "" && !disponibilidad && !envioGratisLote) {
-      alert("Elige al menos un campo para aplicar (día, precio, disponibilidad o envío gratis).");
+    if (!diaTocado && !dia2Tocado && precioRaw === "" && !disponibilidad && !envioGratisLote) {
+      alert("Elige al menos un campo para aplicar (día, 2do día, precio, disponibilidad o envío gratis).");
       return;
     }
 
     comunasSeleccionadas.forEach(id => {
       if (diaTocado) marcarCambio(id, "dia_reparto", dia);
+      if (dia2Tocado) marcarCambio(id, "dia_reparto_2", dia2);
       if (precioRaw !== "") marcarCambio(id, "precio_despacho", parseInt(precioRaw, 10));
       if (disponibilidad) marcarCambio(id, "activa", disponibilidad === "si");
       if (envioGratisLote) marcarCambio(id, "envio_gratis_defecto", envioGratisLote === "si");
@@ -1075,6 +1097,7 @@
 
     document.getElementById("loteComunasPrecio").value = "";
     document.getElementById("loteComunasDia").selectedIndex = 0;
+    document.getElementById("loteComunasDia2").selectedIndex = 0;
     document.getElementById("loteComunasDisponibilidad").value = "";
     document.getElementById("loteComunasEnvioGratis").value = "";
     renderComunas();
@@ -1100,6 +1123,7 @@
         .from("comunas_rutas")
         .update({
           dia_reparto: c.dia_reparto || null,
+          dia_reparto_2: c.dia_reparto_2 || null,
           precio_despacho: c.precio_despacho,
           activa: c.activa !== false,
           envio_gratis_defecto: c.envio_gratis_defecto === true
