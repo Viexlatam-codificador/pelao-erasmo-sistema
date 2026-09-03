@@ -286,6 +286,8 @@
       </span>
       <button class="btn btn-secondary" style="padding:8px 12px;font-size:.8rem;" onclick="descargarMisVentas()">Descargar Excel</button>
     </h2>
+    <p style="font-size:.78rem;color:#888;margin:4px 0 6px;" id="totalesProductosVendedorTitulo"></p>
+    <div class="resumen-grid" id="totalesProductosVendedorWrap" style="margin-bottom:12px;"></div>
     <div id="misPedidosWrap">
       <p class="empty-state">Cargando tus pedidos...</p>
     </div>
@@ -1248,6 +1250,40 @@
   const ORDEN_ESTADOS_VENDEDOR = ["pendiente", "preparacion", "rechazado", "listo_despacho", "en_ruta", "entregado", "anulado"];
   const ESTADOS_ABIERTOS_VENDEDOR = ["pendiente", "preparacion", "rechazado"];
 
+  // Cuánto suma cada producto entre tus pedidos cargados (sin anulados ni
+  // rechazados, porque esos no se despachan) — para saber de un vistazo
+  // cuánto has vendido de cada uno, igual que ve el admin.
+  function calcularTotalesProductosVendedor(pedidos) {
+    const totales = {};
+    const sumar = (nombre, cantidad) => {
+      if (!nombre || !cantidad) return;
+      totales[nombre] = (totales[nombre] || 0) + Number(cantidad);
+    };
+    pedidos
+      .filter(p => p.estado !== "anulado" && p.estado !== "rechazado")
+      .forEach(p => {
+        sumar("Pipeño 5L", p.cantidad_pipeno);
+        sumar("Granadina", p.cantidad_granadina);
+        (p.detalle_productos || []).forEach(l => {
+          if (l && l.nombre && !/pipe.o\s*5|granadina/i.test(l.nombre)) sumar(l.nombre, l.cantidad);
+        });
+      });
+    return totales;
+  }
+
+  function renderTotalesProductosVendedor() {
+    const wrap = document.getElementById("totalesProductosVendedorWrap");
+    const titulo = document.getElementById("totalesProductosVendedorTitulo");
+    if (!wrap || !titulo) return;
+    const totales = calcularTotalesProductosVendedor(misPedidosCache);
+    const entradas = Object.entries(totales).sort((a, b) => b[1] - a[1]);
+    if (!entradas.length) { wrap.innerHTML = ""; titulo.textContent = ""; return; }
+    titulo.textContent = "Total de productos vendidos (tus últimos pedidos, sin anulados ni rechazados):";
+    wrap.innerHTML = entradas.map(([nombre, cantidad]) => `
+      <div class="resumen-card"><div class="num">${cantidad}</div><div class="lbl">${nombre}</div></div>
+    `).join("");
+  }
+
   async function cargarMisPedidos() {
     const wrap = document.getElementById("misPedidosWrap");
     const campos = "id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, dia_reparto, cantidad_pipeno, cantidad_granadina, precio_unitario_pipeno, precio_unitario_granadina, detalle_productos, forma_pago, observaciones, hora_entrega, envio_gratis, motivo_rechazo, necesita_atencion_vendedor, total, estado, creado_en";
@@ -1264,6 +1300,7 @@
     misPedidosCache = data || [];
     edicionAbiertaId = null;
     plantillaAbiertaId = null;
+    renderTotalesProductosVendedor();
 
     if (!misPedidosCache.length) {
       wrap.innerHTML = `<p class="empty-state">Todavía no has ingresado pedidos.</p>`;
@@ -1826,10 +1863,27 @@
     }
   }
 
+  // Igual que en admin.html: Pipeño 2L (y cualquier otro producto agregado
+  // del catálogo) viene dentro de detalle_productos, sin columna propia en
+  // la tabla pedidos — se separa acá para que el Excel quede con una
+  // columna por producto y se pueda sumar el total de cada uno.
+  function desglosarProductosExtraVendedor(p) {
+    let cantidadPipeno2L = 0;
+    const otros = [];
+    (p.detalle_productos || []).forEach(l => {
+      if (!l || !l.nombre) return;
+      if (/pipe.o\s*5/i.test(l.nombre)) return;
+      if (/granadina/i.test(l.nombre)) return;
+      if (/pipe.o\s*2/i.test(l.nombre)) { cantidadPipeno2L += l.cantidad || 0; return; }
+      otros.push(`${l.nombre} x${l.cantidad}`);
+    });
+    return { cantidadPipeno2L, otrosTexto: otros.join(", ") };
+  }
+
   async function descargarMisVentas() {
     const { data, error } = await supa
       .from("pedidos")
-      .select("fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, total, forma_pago, estado, dia_reparto, creado_en")
+      .select("fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, detalle_productos, total, forma_pago, estado, dia_reparto, creado_en")
       .order("creado_en", { ascending: false });
 
     if (error || !data || data.length === 0) {
@@ -1837,21 +1891,26 @@
       return;
     }
 
-    const filas = data.map(p => ({
-      "Fecha": p.fecha,
-      "Cliente": p.nombre_cliente,
-      "Teléfono": p.telefono,
-      "Dirección": `${p.direccion} ${p.numero}${p.departamento ? " Depto " + p.departamento : ""}`,
-      "Comuna": p.comuna,
-      "Región": p.region,
-      "Cant. Pipeño": p.cantidad_pipeno,
-      "Cant. Granadina": p.cantidad_granadina,
-      "Total": p.total,
-      "Forma de pago": p.forma_pago,
-      "Estado": ESTADO_LABEL[p.estado] || p.estado,
-      "Día de ruta": p.dia_reparto === "sin_asignar" ? "Sin ruta" : p.dia_reparto,
-      "Creado": p.creado_en
-    }));
+    const filas = data.map(p => {
+      const desglose = desglosarProductosExtraVendedor(p);
+      return {
+        "Fecha": p.fecha,
+        "Cliente": p.nombre_cliente,
+        "Teléfono": p.telefono,
+        "Dirección": `${p.direccion} ${p.numero}${p.departamento ? " Depto " + p.departamento : ""}`,
+        "Comuna": p.comuna,
+        "Región": p.region,
+        "Pipeño 5L": p.cantidad_pipeno > 0 ? p.cantidad_pipeno : "",
+        "Granadina": p.cantidad_granadina > 0 ? p.cantidad_granadina : "",
+        "Pipeño 2L": desglose.cantidadPipeno2L > 0 ? desglose.cantidadPipeno2L : "",
+        "Otros productos": desglose.otrosTexto,
+        "Total": p.total,
+        "Forma de pago": p.forma_pago,
+        "Estado": ESTADO_LABEL[p.estado] || p.estado,
+        "Día de ruta": p.dia_reparto === "sin_asignar" ? "Sin ruta" : p.dia_reparto,
+        "Creado": p.creado_en
+      };
+    });
 
     const hoja = XLSX.utils.json_to_sheet(filas);
     const libro = XLSX.utils.book_new();
