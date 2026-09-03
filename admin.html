@@ -2817,8 +2817,21 @@
       `;
     }).join("");
 
+    // Total de cada producto en esta ruta (Pipeño 5L, Granadina, Pipeño 2L,
+    // etc.) — para que el repartidor sepa de un vistazo cuánto cargar, sin
+    // tener que sumar pedido por pedido.
+    const totalesRuta = calcularTotalesProductosAdmin(rutaActual);
+    const entradasRuta = Object.entries(totalesRuta).sort((a, b) => b[1] - a[1]);
+    const totalesRutaHtml = entradasRuta.length ? `
+      <p style="font-size:.78rem;color:#888;margin:0 0 6px;">Total a repartir en esta ruta:</p>
+      <div class="resumen-grid" style="margin-bottom:12px;">
+        ${entradasRuta.map(([nombre, cantidad]) => `<div class="resumen-card"><div class="num">${cantidad}</div><div class="lbl">${nombre}</div></div>`).join("")}
+      </div>
+    ` : "";
+
     wrap.innerHTML = `
       <p style="font-weight:700;color:var(--verde-oscuro);margin:0 0 8px;">${rutaTituloActual} — ${rutaActual.length} pedido(s)${pedidosExtra.length ? ` (incluye ${pedidosExtra.length} por día especial)` : ""}${rutaFiltrosTexto}</p>
+      ${totalesRutaHtml}
       <table class="orders">
         <thead><tr><th>Comuna</th><th>Dirección</th><th>Cliente</th><th>Vendedor</th><th>Total</th><th>Estado</th></tr></thead>
         <tbody>${filas}</tbody>
@@ -2845,26 +2858,30 @@
     area.remove();
   }
 
+  // Pipeño 2L (y cualquier otro producto agregado desde el catálogo) viene
+  // siempre dentro de detalle_productos — no tiene su propia columna en la
+  // tabla pedidos como sí la tienen Pipeño 5L y Granadina. Esta función
+  // separa esa info en "Pipeño 2L" + "Otros productos" para que todos los
+  // Excel del sistema queden armados igual: una columna por producto, para
+  // poder sumar el total de cada uno directo en la planilla.
+  function desglosarProductosExtra(p) {
+    let cantidadPipeno2L = 0;
+    const otros = [];
+    (p.detalle_productos || []).forEach(l => {
+      if (!l || !l.nombre) return;
+      if (/pipe.o\s*5/i.test(l.nombre)) return; // ya está en su propia columna
+      if (/granadina/i.test(l.nombre)) return;   // ya está en su propia columna
+      if (/pipe.o\s*2/i.test(l.nombre)) { cantidadPipeno2L += l.cantidad || 0; return; }
+      otros.push(`${l.nombre} x${l.cantidad}`);
+    });
+    return { cantidadPipeno2L, otrosTexto: otros.join(", ") };
+  }
+
   function exportarRutaExcel() {
     if (!rutaActual.length) return;
     const filas = rutaActual.map(p => {
       const vendedor = vendedoresCache.find(v => v.id === p.vendedor_id);
-
-      // Pipeño 2L viene siempre dentro de detalle_productos (es un producto
-      // "extra" agregado desde el catálogo del admin, no tiene su propia
-      // columna en la tabla pedidos como sí la tienen Pipeño 5L y Granadina).
-      // Cualquier otro producto que se agregue a futuro cae en "Otros
-      // productos" para no perder esa información en el Excel.
-      let cantidadPipeno2L = 0;
-      const otros = [];
-      (p.detalle_productos || []).forEach(l => {
-        if (!l.nombre) return;
-        if (/pipe.o\s*5/i.test(l.nombre)) return; // ya está en su propia columna
-        if (/granadina/i.test(l.nombre)) return;   // ya está en su propia columna
-        if (/pipe.o\s*2/i.test(l.nombre)) { cantidadPipeno2L += l.cantidad || 0; return; }
-        otros.push(`${l.nombre} x${l.cantidad}`);
-      });
-
+      const desglose = desglosarProductosExtra(p);
       return {
         "Comuna": p.comuna,
         "Dirección": `${p.direccion} ${p.numero}${p.departamento ? " depto " + p.departamento : ""}`,
@@ -2873,8 +2890,8 @@
         "Vendedor": vendedor ? vendedor.nombre_completo : "Sin vendedor",
         "Pipeño 5L": p.cantidad_pipeno > 0 ? p.cantidad_pipeno : "",
         "Granadina": p.cantidad_granadina > 0 ? p.cantidad_granadina : "",
-        "Pipeño 2L": cantidadPipeno2L > 0 ? cantidadPipeno2L : "",
-        "Otros productos": otros.join(", "),
+        "Pipeño 2L": desglose.cantidadPipeno2L > 0 ? desglose.cantidadPipeno2L : "",
+        "Otros productos": desglose.otrosTexto,
         "Forma de pago": p.forma_pago,
         "Total": p.total,
         "Estado": ESTADO_LABEL[p.estado] || p.estado
@@ -3393,18 +3410,23 @@
   function descargarInformeGeneralExcel() {
     if (!informeGeneralPedidosCache.length) return;
     const vendedoresPorId = {}; vendedoresCache.forEach(v => { vendedoresPorId[v.id] = v.nombre_completo; });
-    const filas = informeGeneralPedidosCache.map(p => ({
-      "Fecha": p.fecha,
-      "Cliente": p.nombre_cliente,
-      "Comuna": p.comuna,
-      "Región": p.region,
-      "Vendedor": p.vendedor_id ? (vendedoresPorId[p.vendedor_id] || "—") : "Sin vendedor",
-      "Cant. Pipeño": p.cantidad_pipeno,
-      "Cant. Granadina": p.cantidad_granadina,
-      "Forma de pago": p.forma_pago,
-      "Total": p.total,
-      "Estado": ESTADO_LABEL[p.estado] || p.estado
-    }));
+    const filas = informeGeneralPedidosCache.map(p => {
+      const desglose = desglosarProductosExtra(p);
+      return {
+        "Fecha": p.fecha,
+        "Cliente": p.nombre_cliente,
+        "Comuna": p.comuna,
+        "Región": p.region,
+        "Vendedor": p.vendedor_id ? (vendedoresPorId[p.vendedor_id] || "—") : "Sin vendedor",
+        "Pipeño 5L": p.cantidad_pipeno > 0 ? p.cantidad_pipeno : "",
+        "Granadina": p.cantidad_granadina > 0 ? p.cantidad_granadina : "",
+        "Pipeño 2L": desglose.cantidadPipeno2L > 0 ? desglose.cantidadPipeno2L : "",
+        "Otros productos": desglose.otrosTexto,
+        "Forma de pago": p.forma_pago,
+        "Total": p.total,
+        "Estado": ESTADO_LABEL[p.estado] || p.estado
+      };
+    });
     const hoja = XLSX.utils.json_to_sheet(filas);
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Informe general");
