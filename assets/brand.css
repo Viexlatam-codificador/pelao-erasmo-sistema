@@ -482,3 +482,11 @@ table.orders th{
   white-space:nowrap;
 }
 .item-historial-badge{flex-shrink:0;font-size:.72rem;color:var(--verde-oscuro);font-weight:700;white-space:nowrap;}
+
+/* Tarjetas de resumen numérico (KPIs) — usadas en admin.html y también en
+   los totales de productos de vendedor.html y reparto.html, para que se
+   vean iguales en las tres pantallas. */
+.resumen-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:4px; }
+.resumen-card{ background:#f6f8f4; border-radius:10px; padding:10px 12px; }
+.resumen-card .num{ font-size:1.3rem; font-weight:800; color:var(--verde-oscuro); }
+.resumen-card .lbl{ font-size:.72rem; color:#777; text-transform:uppercase; letter-spacing:.3px; }
