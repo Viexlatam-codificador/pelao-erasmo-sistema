@@ -101,6 +101,8 @@
     <div class="day-chips" id="diaChipsWrap"></div>
     <p id="progresoTexto" style="font-size:.85rem;color:#666;margin:10px 0 0;font-weight:700;"></p>
     <div class="progress-wrap"><div class="progress-fill" id="progresoFill" style="width:0%;"></div></div>
+    <p style="font-size:.78rem;color:#888;margin:12px 0 6px;" id="totalesProductosRepartoTitulo"></p>
+    <div class="resumen-grid" id="totalesProductosRepartoWrap"></div>
     <button class="btn btn-secondary btn-block" style="margin-top:14px;" onclick="cargarRuta()">🔄 Actualizar</button>
     <button class="btn btn-secondary btn-block" style="margin-top:10px;display:none;" id="rutaMapaBtn" onclick="toggleMapaRutaReparto()">🗺️ Ver mapa y ordenar mi ruta</button>
     <div class="filtro-entregados">
@@ -239,6 +241,39 @@
 
   let rutaCache = [];
 
+  // Cuánto queda por repartir de cada producto (sin contar lo ya
+  // entregado) — para que el repartidor sepa de un vistazo cuánto cargar,
+  // sin tener que sumar pedido por pedido.
+  function calcularTotalesProductosReparto(pedidos) {
+    const totales = {};
+    const sumar = (nombre, cantidad) => {
+      if (!nombre || !cantidad) return;
+      totales[nombre] = (totales[nombre] || 0) + Number(cantidad);
+    };
+    pedidos.forEach(p => {
+      sumar("Pipeño 5L", p.cantidad_pipeno);
+      sumar("Granadina", p.cantidad_granadina);
+      (p.detalle_productos || []).forEach(l => {
+        if (l && l.nombre && !/pipe.o\s*5|granadina/i.test(l.nombre)) sumar(l.nombre, l.cantidad);
+      });
+    });
+    return totales;
+  }
+
+  function renderTotalesProductosReparto() {
+    const wrap = document.getElementById("totalesProductosRepartoWrap");
+    const titulo = document.getElementById("totalesProductosRepartoTitulo");
+    if (!wrap || !titulo) return;
+    const pendientes = rutaCache.filter(p => p.estado !== "entregado");
+    const totales = calcularTotalesProductosReparto(pendientes);
+    const entradas = Object.entries(totales).sort((a, b) => b[1] - a[1]);
+    if (!entradas.length) { wrap.innerHTML = ""; titulo.textContent = ""; return; }
+    titulo.textContent = "Total por repartir en esta vista:";
+    wrap.innerHTML = entradas.map(([nombre, cantidad]) => `
+      <div class="resumen-card"><div class="num">${cantidad}</div><div class="lbl">${nombre}</div></div>
+    `).join("");
+  }
+
   async function cargarRuta() {
     const wrap = document.getElementById("rutaWrap");
     wrap.innerHTML = '<p class="empty-state">Cargando tu ruta...</p>';
@@ -297,6 +332,7 @@
       ? `${entregados} de ${total} entregados`
       : "Sin pedidos en esta vista todavía.";
     document.getElementById("progresoFill").style.width = total ? `${Math.round((entregados / total) * 100)}%` : "0%";
+    renderTotalesProductosReparto();
 
     if (total === 0) {
       wrap.innerHTML = '<p class="empty-state">No hay pedidos listos para repartir en esta vista.</p>';
@@ -888,28 +924,51 @@
       return;
     }
 
-    const filas = data.map(p => ({
-      "Fecha": p.fecha,
-      "Hora entrega": p.hora_entrega || "-",
-      "Cliente": p.nombre_cliente,
-      "Teléfono": p.telefono,
-      "Dirección": `${p.direccion} ${p.numero}${p.departamento ? " Depto " + p.departamento : ""}`,
-      "Comuna": p.comuna,
-      "Región": p.region,
-      "Día de ruta": p.dia_reparto === "sin_asignar" ? "Sin ruta" : p.dia_reparto,
-      "Productos": resumenProductos(p),
-      "Forma de pago": p.forma_pago,
-      "Envío": p.envio_gratis ? "Gratis" : "Pagado",
-      "Total": p.total,
-      "Estado": ESTADO_LABEL[p.estado] || p.estado,
-      "Motivo rechazo/reagenda": p.motivo_rechazo || "-",
-      "Creado": p.creado_en
-    }));
+    // Igual que en admin.html: Pipeño 2L (y cualquier otro producto extra)
+    // viene dentro de detalle_productos, sin columna propia en la tabla
+    // pedidos — se separa acá para que quede una columna por producto y se
+    // pueda sumar el total de cada uno directo en la planilla.
+    const desglosarProductosExtraReparto = (p) => {
+      let cantidadPipeno2L = 0;
+      const otros = [];
+      (p.detalle_productos || []).forEach(l => {
+        if (!l || !l.nombre) return;
+        if (/pipe.o\s*5/i.test(l.nombre)) return;
+        if (/granadina/i.test(l.nombre)) return;
+        if (/pipe.o\s*2/i.test(l.nombre)) { cantidadPipeno2L += l.cantidad || 0; return; }
+        otros.push(`${l.nombre} x${l.cantidad}`);
+      });
+      return { cantidadPipeno2L, otrosTexto: otros.join(", ") };
+    };
+
+    const filas = data.map(p => {
+      const desglose = desglosarProductosExtraReparto(p);
+      return {
+        "Fecha": p.fecha,
+        "Hora entrega": p.hora_entrega || "-",
+        "Cliente": p.nombre_cliente,
+        "Teléfono": p.telefono,
+        "Dirección": `${p.direccion} ${p.numero}${p.departamento ? " Depto " + p.departamento : ""}`,
+        "Comuna": p.comuna,
+        "Región": p.region,
+        "Día de ruta": p.dia_reparto === "sin_asignar" ? "Sin ruta" : p.dia_reparto,
+        "Pipeño 5L": p.cantidad_pipeno > 0 ? p.cantidad_pipeno : "",
+        "Granadina": p.cantidad_granadina > 0 ? p.cantidad_granadina : "",
+        "Pipeño 2L": desglose.cantidadPipeno2L > 0 ? desglose.cantidadPipeno2L : "",
+        "Otros productos": desglose.otrosTexto,
+        "Forma de pago": p.forma_pago,
+        "Envío": p.envio_gratis ? "Gratis" : "Pagado",
+        "Total": p.total,
+        "Estado": ESTADO_LABEL[p.estado] || p.estado,
+        "Motivo rechazo/reagenda": p.motivo_rechazo || "-",
+        "Creado": p.creado_en
+      };
+    });
 
     const hoja = XLSX.utils.json_to_sheet(filas);
     hoja["!cols"] = [
       { wch: 11 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 16 }, { wch: 20 }, { wch: 12 },
-      { wch: 28 }, { wch: 20 }, { wch: 9 }, { wch: 11 }, { wch: 14 }, { wch: 28 }, { wch: 20 }
+      { wch: 11 }, { wch: 11 }, { wch: 11 }, { wch: 22 }, { wch: 20 }, { wch: 9 }, { wch: 11 }, { wch: 14 }, { wch: 28 }, { wch: 20 }
     ];
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Historial reparto");
