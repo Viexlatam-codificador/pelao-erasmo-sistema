@@ -1286,7 +1286,7 @@
 
   async function cargarMisPedidos() {
     const wrap = document.getElementById("misPedidosWrap");
-    const campos = "id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, dia_reparto, cantidad_pipeno, cantidad_granadina, precio_unitario_pipeno, precio_unitario_granadina, detalle_productos, forma_pago, observaciones, hora_entrega, envio_gratis, motivo_rechazo, necesita_atencion_vendedor, total, estado, creado_en";
+    const campos = "id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, dia_reparto, cantidad_pipeno, cantidad_granadina, precio_unitario_pipeno, precio_unitario_granadina, detalle_productos, forma_pago, observaciones, hora_entrega, envio_gratis, motivo_rechazo, necesita_atencion_vendedor, total, estado, creado_en, foto_problema_url, foto_entrega_url";
     const { data, error } = await supa
       .from("pedidos")
       .select(campos)
@@ -1321,6 +1321,7 @@
               <a class="stop-btn-llamar" href="tel:${p.telefono}" title="Llamar">📞</a>
               ${telWsp ? `<button type="button" class="stop-btn-whatsapp" title="WhatsApp" onclick="toggleWhatsAppPlantillas('${p.id}')">💬</button>` : ""}
               <button type="button" class="stop-btn-maps" title="Enviar cotización al cliente" onclick="toggleCotizacionGuardada('${p.id}')">🧾</button>
+              ${(p.foto_entrega_url || p.foto_problema_url) ? `<a class="stop-btn-maps" href="${p.foto_entrega_url || p.foto_problema_url}" target="_blank" rel="noopener" title="${p.foto_entrega_url ? "Ver foto de entrega" : "Ver foto de local cerrado"}">📷</a>` : ""}
               ${filaEditable(p) ? `<button type="button" class="stop-btn-enruta" title="Editar" onclick="abrirEdicionPedidoVendedor('${p.id}')">✏️</button>` : ""}
             </div>
           </td>
@@ -1524,6 +1525,7 @@
       <td colspan="6">
         <div class="accion-inline-caja">
           <p style="margin:0;font-size:.82rem;color:#c62828;">❌ Este pedido fue rechazado por el repartidor${p.motivo_rechazo ? ": " + escAttr(p.motivo_rechazo) : "."}</p>
+          ${p.foto_problema_url ? `<a href="${p.foto_problema_url}" target="_blank" rel="noopener" style="display:inline-block;margin:6px 0;"><img src="${p.foto_problema_url}" alt="Foto tomada por el repartidor" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #ddd;"></a>` : ""}
           <label>Nueva fecha de entrega para reactivarlo</label>
           <input type="date" id="reactivarFecha_${p.id}" value="${manana.toISOString().slice(0, 10)}">
           <div class="accion-inline-botones">
