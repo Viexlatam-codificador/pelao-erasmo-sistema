@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel Administrador — El Pelao Erasmo</title>
 <link rel="stylesheet" href="assets/brand.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#155724">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pelao Erasmo">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="icon" href="assets/icons/icon-192.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   table.comunas th, table.comunas td{ vertical-align:middle; }
@@ -3773,6 +3781,14 @@
       status.classList.add("error");
       status.textContent = "No se pudo conectar con el servidor. Verifica que el sitio esté desplegado en Vercel con la función /api configurada.";
     }
+  }
+</script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
   }
 </script>
 
