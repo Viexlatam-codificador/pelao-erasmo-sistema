@@ -179,7 +179,7 @@
 
     <div class="filtro-bar">
       <input type="text" id="pedidosBusqueda" placeholder="Buscar cliente o teléfono..." onkeydown="if(event.key==='Enter') cargarPedidosAdmin()">
-      <select id="pedidosFiltroEstado" onchange="cargarPedidosAdmin()">
+      <select id="pedidosFiltroEstado" autocomplete="off" onchange="cargarPedidosAdmin()">
         <option value="">Activos (sin entregados/rechazados)</option>
         <option value="pendiente">Pendiente</option>
         <option value="preparacion">Preparación</option>
@@ -204,6 +204,7 @@
       <input type="date" id="pedidosFiltroDesde" title="Desde">
       <input type="date" id="pedidosFiltroHasta" title="Hasta">
       <button type="button" class="btn btn-secondary" style="padding:8px 14px;font-size:.85rem;" onclick="cargarPedidosAdmin()">Buscar</button>
+      <button type="button" class="btn btn-secondary" style="padding:8px 14px;font-size:.85rem;" onclick="cargarPedidosAdmin()" title="Volver a cargar la lista">🔄 Actualizar</button>
     </div>
 
     <p style="font-size:.78rem;color:#888;margin:4px 0 6px;" id="totalesProductosTitulo"></p>
@@ -340,7 +341,7 @@
       </div>
     </div>
     <div class="filtro-bar">
-      <select id="rutaFiltroEstado" title="Filtrar por estado">
+      <select id="rutaFiltroEstado" autocomplete="off" title="Filtrar por estado">
         <option value="__pendientes__">Pendientes de entregar (recomendado)</option>
         <option value="">Todos los estados (incluye entregados)</option>
         <option value="pendiente">Solo: Pendiente</option>
@@ -854,6 +855,13 @@
     cargarBannerAdmin();
     cargarImagenesLandingAdmin();
     cargarResumenPedidos();
+    // Se fuerza el filtro a su valor seguro por defecto al entrar — si el
+    // navegador restaura un filtro distinto de una sesión anterior (pasa
+    // con los <select>), un pedido ya entregado podía seguir apareciendo
+    // en la lista principal sin que nadie hubiera elegido verlo así.
+    document.getElementById("pedidosFiltroEstado").value = "";
+    const filtroEstadoRuta = document.getElementById("rutaFiltroEstado");
+    if (filtroEstadoRuta) filtroEstadoRuta.value = "__pendientes__";
     // Los vendedores se cargan antes de los pedidos: la tabla de pedidos
     // necesita vendedoresCache para mostrar el nombre del vendedor de cada fila.
     await cargarVendedoresAdmin();
@@ -861,6 +869,19 @@
     cargarRepartidoresAdmin();
     cargarCalendarioSemanaAdmin();
     inicializarBotonHistorial("admin");
+
+    // Refresco automático de la lista de Pedidos cada 25 segundos — para que
+    // cuando un rutero marca algo como entregado (o rechazado, o lo que
+    // sea) desde su celular, deje de aparecer acá solo, sin que el admin
+    // tenga que acordarse de recargar la página. Se salta el refresco si
+    // hay un pedido abierto en el modal, pedidos seleccionados para un
+    // cambio en lote, o si se está escribiendo en la búsqueda — para no
+    // interrumpir lo que se esté haciendo en ese momento.
+    setInterval(() => {
+      const buscando = document.activeElement && (document.activeElement.id === "pedidosBusqueda" || document.activeElement.id === "pedidosFiltroComuna");
+      if (pedidoExpandidoId || pedidosSeleccionados.size > 0 || buscando) return;
+      cargarPedidosAdmin();
+    }, 25000);
   });
 
   document.getElementById("filtroComuna").addEventListener("input", renderComunas);
