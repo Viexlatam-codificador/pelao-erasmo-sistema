@@ -142,6 +142,9 @@
       <div class="resumen-card"><div class="num" id="resEnRuta">-</div><div class="lbl">En ruta hoy</div></div>
       <div class="resumen-card"><div class="num" id="resEntregados">-</div><div class="lbl">Entregados hoy</div></div>
       <div class="resumen-card"><div class="num" id="resAnulados">-</div><div class="lbl">Anulados hoy</div></div>
+      <div class="resumen-card" style="cursor:pointer;background:#fdecea;" onclick="irARechazadosAdmin()" title="Ver todos los pedidos rechazados o que necesitan reagendarse">
+        <div class="num" id="resRechazados" style="color:#c62828;">-</div><div class="lbl">Rechazados / reagendar</div>
+      </div>
       <div class="resumen-card"><div class="num" id="resVentasHoy">-</div><div class="lbl">Ventas hoy</div></div>
       <div class="resumen-card"><div class="num" id="resVentasMes">-</div><div class="lbl">Ventas del mes</div></div>
     </div>
@@ -160,7 +163,7 @@
     </div>
   </section>
 
-  <section class="card">
+  <section class="card" id="pedidosSeccionAdmin">
     <h2 class="card-title">
       <svg class="icon" viewBox="0 0 24 24"><path d="M6 2h12v19l-2-1-2 1-2-1-2 1-2-1-2 1V2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
       Pedidos
@@ -1807,6 +1810,25 @@
     document.getElementById("resAnulados").textContent = conteo.anulado;
     document.getElementById("resVentasHoy").textContent = money(ventasHoy);
     document.getElementById("resVentasMes").textContent = money(ventasMes);
+
+    // Los rechazados no se filtran por fecha de hoy: uno de ayer sigue
+    // necesitando que alguien lo reagende o lo cierre, así que este
+    // contador cuenta TODOS los pedidos rechazados que hay, no solo los
+    // de hoy — es la "base de rechazados" siempre visible.
+    const { count: totalRechazados } = await supa
+      .from("pedidos")
+      .select("id", { count: "exact", head: true })
+      .eq("estado", "rechazado");
+    document.getElementById("resRechazados").textContent = totalRechazados || 0;
+  }
+
+  // Salta directo a la lista de Pedidos filtrada por "Rechazado" — para que
+  // revisar la base de rechazados sea un clic, no cambiar el filtro a mano
+  // cada vez.
+  function irARechazadosAdmin() {
+    document.getElementById("pedidosFiltroEstado").value = "rechazado";
+    document.getElementById("pedidosSeccionAdmin").scrollIntoView({ behavior: "smooth" });
+    cargarPedidosAdmin();
   }
 
   // ==========================================================================
