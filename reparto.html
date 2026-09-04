@@ -523,8 +523,13 @@
     // El RPC deja la fecha nueva, pero el día de la semana (dia_reparto) hay
     // que recalcularlo acá — si no, el pedido queda con el día viejo y no
     // aparece en la ruta correcta sin tener que corregirlo a mano después.
+    // (Es un respaldo: la base de datos también lo recalcula sola cuando
+    // cambia la fecha, pero se deja este chequeo por si acaso — antes el
+    // resultado de este guardado ni se miraba, así que si fallaba quedaba
+    // en silencio sin que nadie se enterara.)
     const diaNuevo = diaSemanaDeFechaReparto(nuevaFecha);
-    await supa.from("pedidos").update({ dia_reparto: diaNuevo }).eq("id", pedidoId);
+    const { error: errorDia } = await supa.from("pedidos").update({ dia_reparto: diaNuevo }).eq("id", pedidoId);
+    if (errorDia) console.warn("No se pudo sincronizar el día de reparto tras reagendar:", errorDia.message);
 
     accionAbiertaId = null;
     accionAbiertaTipo = null;
