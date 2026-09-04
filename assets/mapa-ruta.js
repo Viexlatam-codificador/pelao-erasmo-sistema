@@ -35,6 +35,83 @@ function comparadorOrdenRutaMapa(a, b) {
 }
 
 // ==========================================================================
+// Orden inicial sugerido por cercanía (gratis, sin API) + salida directa a
+// Google Maps para navegar con su tráfico en tiempo real.
+// ==========================================================================
+
+// Distancia en línea recta entre dos puntos, en km (fórmula de Haversine).
+// No es distancia real de calle ni considera tráfico — es solo para armar
+// un orden inicial razonable, mucho mejor que alfabético.
+function distanciaHaversineMapa(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Ordena por "vecino más cercano": parte de un punto de inicio (la
+// ubicación actual del repartidor, si la compartió) y en cada paso salta a
+// la parada más cercana a la última visitada. Es una aproximación simple —
+// no sabe de calles cortadas ni de tráfico — pero como orden de partida es
+// muchísimo mejor que alfabético, que era el que había antes.
+function ordenarPorCercaniaMapa(pedidos, puntoInicio) {
+  const conUbicacion = pedidos.filter((p) => p.lat && p.lng);
+  const sinUbicacion = pedidos.filter((p) => !p.lat || !p.lng);
+  if (conUbicacion.length < 2) return pedidos.slice().sort(comparadorOrdenRutaMapa);
+
+  const restantes = conUbicacion.slice();
+  const ordenado = [];
+  let actual = puntoInicio || { lat: restantes[0].lat, lng: restantes[0].lng };
+
+  while (restantes.length) {
+    let mejorIdx = 0, mejorDist = Infinity;
+    restantes.forEach((p, i) => {
+      const d = distanciaHaversineMapa(actual.lat, actual.lng, p.lat, p.lng);
+      if (d < mejorDist) { mejorDist = d; mejorIdx = i; }
+    });
+    const [siguiente] = restantes.splice(mejorIdx, 1);
+    ordenado.push(siguiente);
+    actual = siguiente;
+  }
+  // Las que todavía no tienen ubicación (no se han geocodificado) quedan al
+  // final, alfabético — cuando se geocodifiquen van a entrar al cálculo.
+  return ordenado.concat(sinUbicacion.slice().sort(comparadorOrdenRutaMapa));
+}
+
+// Arma uno o más links de Google Maps con las paradas en el orden actual,
+// para que el repartidor navegue con la app real de Google Maps — que sí
+// calcula el mejor camino según el tráfico del momento (su propio motor,
+// gratis, sin necesitar una clave de API nuestra). Google limita a unos 9
+// puntos intermedios por link, así que si hay más paradas se arman varios
+// "tramos" seguidos, cada uno arrancando donde terminó el anterior.
+function armarLinksGoogleMapsRutaMapa(pedidosOrdenados, puntoInicio) {
+  const CHUNK = 9; // paradas nuevas por tramo, sin contar el origen
+  const puntos = pedidosOrdenados
+    .filter((p) => p.lat && p.lng)
+    .map((p) => `${p.lat},${p.lng}`);
+  if (!puntos.length) return [];
+
+  const tramos = [];
+  let origen = puntoInicio ? `${puntoInicio.lat},${puntoInicio.lng}` : puntos[0];
+  let restantes = puntoInicio ? puntos.slice() : puntos.slice(1);
+  if (!restantes.length) return [];
+
+  while (restantes.length) {
+    const grupo = restantes.slice(0, CHUNK);
+    restantes = restantes.slice(CHUNK);
+    const destino = grupo[grupo.length - 1];
+    const waypoints = grupo.slice(0, -1);
+    const params = new URLSearchParams({ api: "1", origin: origen, destination: destino, travelmode: "driving" });
+    if (waypoints.length) params.set("waypoints", waypoints.join("|"));
+    tramos.push(`https://www.google.com/maps/dir/?${params.toString()}`);
+    origen = destino;
+  }
+  return tramos;
+}
+
+// ==========================================================================
 // Geocodificación (dirección de texto -> lat/lng) usando Nominatim de
 // OpenStreetMap, que es gratis y no requiere clave. Su política de uso pide
 // no pasar de ~1 consulta por segundo, así que se hace de a una, en fila.
@@ -176,9 +253,15 @@ function inyectarEstilosMapaRutaMapa() {
 // Orquestador: junta mapa + lista + geocodificación + guardado, para que
 // admin.html y reparto.html solo tengan que llamar a esta función.
 // ==========================================================================
-function iniciarPlanificadorRutaMapa({ pedidos, mapaContenedorId, listaContenedorId }) {
+function iniciarPlanificadorRutaMapa({ pedidos, mapaContenedorId, listaContenedorId, puntoInicio }) {
   inyectarEstilosMapaRutaMapa();
-  let ordenActual = pedidos.slice().sort(comparadorOrdenRutaMapa);
+  // Si ya hay un orden armado a mano (orden_ruta guardado antes), se
+  // respeta tal cual. Si es la primera vez, se parte de un orden sugerido
+  // por cercanía en vez de alfabético — igual se puede reordenar arrastrando.
+  const yaTieneOrdenManual = pedidos.some((p) => p.orden_ruta != null);
+  let ordenActual = yaTieneOrdenManual
+    ? pedidos.slice().sort(comparadorOrdenRutaMapa)
+    : ordenarPorCercaniaMapa(pedidos, puntoInicio);
 
   function repintar() {
     renderMarcadoresRutaMapa(mapaContenedorId, ordenActual);
@@ -193,6 +276,7 @@ function iniciarPlanificadorRutaMapa({ pedidos, mapaContenedorId, listaContenedo
 
   return {
     obtenerOrdenActual: () => ordenActual,
+    obtenerLinksGoogleMaps: () => armarLinksGoogleMapsRutaMapa(ordenActual, puntoInicio),
     async geocodificarFaltantes(onProgreso) {
       await geocodificarPedidosFaltantesMapa(ordenActual, onProgreso);
       repintar();
