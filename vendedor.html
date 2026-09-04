@@ -1802,11 +1802,24 @@
     const valoresAnteriores = {};
     Object.keys(payload).forEach(k => { valoresAnteriores[k] = p[k]; });
 
-    const { error } = await supa.from("pedidos").update(payload).eq("id", id);
+    // OJO: se pide de vuelta el id guardado (.select("id")) a propósito.
+    // Si la base de datos bloquea el cambio por permisos (por ejemplo,
+    // porque el pedido cambió de estado justo en ese momento) NO marca
+    // error — simplemente no actualiza ninguna fila. Sin este chequeo, acá
+    // se mostraba "Pedido actualizado" igual, y al recargar la lista
+    // aparecían los datos de antes — como si el cambio se hubiera revertido
+    // solo. Ahora, si no se guardó ninguna fila, se avisa clarito.
+    const { data: filasGuardadas, error } = await supa.from("pedidos").update(payload).eq("id", id).select("id");
 
     if (error) {
       status.classList.add("error");
       status.textContent = "No se pudo guardar: " + error.message;
+      return;
+    }
+    if (!filasGuardadas || !filasGuardadas.length) {
+      status.classList.add("error");
+      status.textContent = "No se pudo guardar: este pedido ya cambió de estado (por ejemplo, el admin ya lo puso en ruta) y no se puede editar desde acá. Actualiza la página para ver su estado actual.";
+      await cargarMisPedidos();
       return;
     }
 
@@ -1817,8 +1830,9 @@
     await cargarMisPedidos();
     await cargarAlertasAtencion();
     deshacerConHistorial("Pedido actualizado", async () => {
-      const { error: e2 } = await supa.from("pedidos").update(valoresAnteriores).eq("id", id);
+      const { data: filasRestauradas, error: e2 } = await supa.from("pedidos").update(valoresAnteriores).eq("id", id).select("id");
       if (e2) throw e2;
+      if (!filasRestauradas || !filasRestauradas.length) throw new Error("No se pudo deshacer: el pedido ya cambió de estado.");
       await cargarMisPedidos();
       await cargarAlertasAtencion();
     }, {
