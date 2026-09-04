@@ -490,3 +490,50 @@ table.orders th{
 .resumen-card{ background:#f6f8f4; border-radius:10px; padding:10px 12px; }
 .resumen-card .num{ font-size:1.3rem; font-weight:800; color:var(--verde-oscuro); }
 .resumen-card .lbl{ font-size:.72rem; color:#777; text-transform:uppercase; letter-spacing:.3px; }
+
+/* Nombre/correo del usuario logueado en la barra superior: si es largo, se
+   corta con "..." en vez de empujar el botón "Salir" fuera de la pantalla o
+   encimarse con el logo (pasa sobre todo con celulares angostos). */
+.topbar{ flex-wrap:wrap; row-gap:6px; }
+.topbar .user-chip span{
+  max-width:150px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+/* ============================================================================
+   Celular (login / admin / vendedor / reparto comparten esta hoja, así que
+   un solo breakpoint acá optimiza las cuatro pantallas). La idea no es
+   ocultar información sino darle más aire y evitar que el dedo tenga que
+   apuntar a algo chico: barras de filtro apiladas en una sola columna,
+   tarjetas KPI en 2 columnas fijas en vez de achicarse hasta amontonarse, y
+   el modal de pedidos ocupando casi todo el ancho disponible.
+   ============================================================================ */
+@media (max-width: 640px){
+  main.shell{ padding:14px 10px 32px; }
+  section.card{ padding:14px; border-radius:12px; }
+  h2.card-title{ font-size:1rem; }
+  .topbar{ padding:12px 14px; }
+  .topbar .brand{ font-size:.92rem; }
+  .topbar .user-chip span{ max-width:110px; }
+
+  .filtro-bar{ flex-direction:column; align-items:stretch; }
+  .filtro-bar > *{ width:100%; }
+
+  .resumen-grid{ grid-template-columns:repeat(2, 1fr); }
+
+  table.orders{ font-size:.8rem; }
+
+  .modal-overlay{ padding:10px 6px; }
+  .modal-box{ padding:16px; border-radius:12px; }
+
+  /* iOS hace zoom automático al enfocar un campo con letra menor a 16px —
+     se sube el tamaño en los formularios del modal de edición (lo que más
+     se usa desde el celular) sin tocar las celdas de las tablas grandes,
+     que ya se ven con scroll horizontal a propósito. */
+  .modal-box input[type=text], .modal-box input[type=tel], .modal-box input[type=number],
+  .modal-box input[type=date], .modal-box select, .modal-box textarea{
+    font-size:16px;
+  }
+}
