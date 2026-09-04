@@ -113,11 +113,13 @@
 
   <div id="mapaRutaRepartoWrap" style="display:none;">
     <section class="card">
-      <p style="font-size:.78rem;color:#888;margin:0 0 8px;">Cada pin y cada parada tienen el mismo número y color, agrupados por comuna. Arrastra el ícono ⠿ de una parada para cambiar el orden en que vas a repartir (lo entregado no se muestra acá).</p>
+      <p style="font-size:.78rem;color:#888;margin:0 0 8px;">Cada pin y cada parada tienen el mismo número y color, agrupados por comuna. El orden sugerido de partida es por cercanía (no hace falta ordenarlo a mano) — igual puedes arrastrar el ícono ⠿ de una parada para ajustarlo. Para ir siguiendo el mejor camino según el tráfico del momento, usa "Abrir en Google Maps": ahí navega la app real de Google con su tráfico en vivo (lo entregado no se muestra acá).</p>
       <div id="mapaRutaRepartoMapa" style="height:300px;border-radius:10px;margin-bottom:10px;"></div>
       <div id="mapaRutaRepartoLista"></div>
       <button class="btn btn-primary btn-block" style="margin-top:10px;" onclick="guardarOrdenRutaReparto()">💾 Guardar este orden</button>
       <p class="status-msg" id="mapaRutaRepartoStatus"></p>
+      <button class="btn btn-secondary btn-block" style="margin-top:10px;" onclick="abrirRutaEnGoogleMapsReparto()">🧭 Abrir ruta en Google Maps (con tráfico)</button>
+      <div id="googleMapsTramosRepartoWrap" style="margin-top:6px;"></div>
     </section>
   </div>
 
@@ -732,7 +734,22 @@
   // ==========================================================================
   let planificadorRutaReparto = null;
 
-  function toggleMapaRutaReparto() {
+  // Ubicación actual del repartidor (si la comparte) — se usa para sugerir
+  // un orden de paradas que parta de donde está parado, y para que el link
+  // de Google Maps arranque ahí también. Si no la comparte o se demora
+  // mucho, se sigue igual sin ella (se parte de la primera parada).
+  function obtenerUbicacionActualReparto() {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) { resolve(null); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
+      );
+    });
+  }
+
+  async function toggleMapaRutaReparto() {
     const pendientes = rutaCache.filter(p => p.estado !== "entregado");
     if (!pendientes.length) return;
     const wrap = document.getElementById("mapaRutaRepartoWrap");
@@ -741,13 +758,39 @@
     if (!abrir) return;
 
     if (!planificadorRutaReparto) {
+      const puntoInicio = await obtenerUbicacionActualReparto();
       planificadorRutaReparto = iniciarPlanificadorRutaMapa({
         pedidos: pendientes,
         mapaContenedorId: "mapaRutaRepartoMapa",
-        listaContenedorId: "mapaRutaRepartoLista"
+        listaContenedorId: "mapaRutaRepartoLista",
+        puntoInicio
       });
       geocodificarConProgresoUIMapa(planificadorRutaReparto, "mapaRutaRepartoStatus");
     }
+  }
+
+  // Abre la ruta armada (en el orden actual del planificador) directo en
+  // Google Maps, para navegar con su tráfico en tiempo real. Si hay más de
+  // ~9 paradas, Google no las deja todas en un solo link — se abre el
+  // primer tramo y se dejan botones para los siguientes, cada uno arranca
+  // justo donde terminó el anterior.
+  function abrirRutaEnGoogleMapsReparto() {
+    if (!planificadorRutaReparto) return;
+    const links = planificadorRutaReparto.obtenerLinksGoogleMaps();
+    const wrap = document.getElementById("googleMapsTramosRepartoWrap");
+    if (!links.length) {
+      wrap.innerHTML = '<p class="status-msg error">Todavía faltan paradas por ubicar en el mapa — espera a que termine de geolocalizarlas y prueba de nuevo.</p>';
+      return;
+    }
+    window.open(links[0], "_blank", "noopener");
+    if (links.length === 1) {
+      wrap.innerHTML = "";
+      return;
+    }
+    wrap.innerHTML = `
+      <p style="font-size:.76rem;color:#888;margin:6px 0 4px;">Tu ruta tiene muchas paradas — Google Maps arma de a 9 por link. Abre cada tramo cuando termines el anterior:</p>
+      ${links.map((link, i) => `<a href="${link}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin-top:6px;text-decoration:none;text-align:center;display:block;">🧭 Tramo ${i + 1} de ${links.length}</a>`).join("")}
+    `;
   }
 
   async function guardarOrdenRutaReparto() {
