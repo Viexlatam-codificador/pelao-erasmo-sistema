@@ -1,6 +1,6 @@
 {
-  "name": "El Pelao Erasmo — Sistema de Pedidos",
-  "short_name": "Pelao Erasmo",
+  "name": "Veltrix — El Pelao Erasmo",
+  "short_name": "Veltrix",
   "description": "Sistema interno de pedidos y rutas de El Pelao Erasmo (vendedores, administración y reparto).",
   "start_url": "login.html",
   "scope": "./",
