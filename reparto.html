@@ -78,6 +78,22 @@
     background:#fff; border:1px solid #eee; border-radius:8px; margin-bottom:6px; font-size:.82rem;
   }
   .calendario-detalle-item:last-child{ margin-bottom:0; }
+
+  /* Fotos de entrega / "local cerrado" que sube el repartidor desde el
+     celular (cámara o galería). Botones del mismo estilo que "Avisar
+     llegada", en un tono distinto (lila) para diferenciarlos, más las
+     miniaturas de las fotos ya subidas. */
+  .stop-btn-foto{
+    display:inline-flex; align-items:center; gap:5px; padding:9px 12px; border-radius:8px;
+    font-size:.78rem; font-weight:700; border:1px solid transparent; cursor:pointer; text-decoration:none;
+    background:#ede7f6; color:#4527a0; border-color:#d1c4e9;
+  }
+  .stop-fotos{ display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }
+  .stop-foto-item{ text-align:center; }
+  .stop-foto-thumb{
+    width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid #ddd; display:block;
+  }
+  .stop-foto-item span{ display:block; font-size:.6rem; color:#888; margin-top:2px; max-width:56px; }
 </style>
 </head>
 <body>
@@ -280,7 +296,7 @@
     const wrap = document.getElementById("rutaWrap");
     wrap.innerHTML = '<p class="empty-state">Cargando tu ruta...</p>';
 
-    const campos = "id, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, detalle_productos, total, forma_pago, estado, dia_reparto, observaciones, lat, lng, orden_ruta, fecha";
+    const campos = "id, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, cantidad_granadina, detalle_productos, total, forma_pago, estado, dia_reparto, observaciones, lat, lng, orden_ruta, fecha, foto_problema_url, foto_entrega_url";
 
     // Los pendientes se filtran por día de la semana (dia_reparto), como
     // siempre. Los entregados se filtran aparte, por la fecha puntual
@@ -351,6 +367,15 @@
 
     let botonesEstado = "";
     let botonesAtencion = "";
+    let botonesFoto = "";
+    if (p.estado === "listo_despacho" || p.estado === "en_ruta") {
+      botonesFoto = `
+        <label class="stop-btn-foto" for="fotoProblema_${p.id}">📷 Local cerrado</label>
+        <input type="file" accept="image/*" capture="environment" id="fotoProblema_${p.id}" style="display:none" onchange="subirFotoPedido('${p.id}','problema', this)">
+        <label class="stop-btn-foto" for="fotoEntrega_${p.id}">📷 Foto entrega</label>
+        <input type="file" accept="image/*" capture="environment" id="fotoEntrega_${p.id}" style="display:none" onchange="subirFotoPedido('${p.id}','entrega', this)">
+      `;
+    }
     if (p.estado === "listo_despacho") {
       botonesEstado = `
         <button class="stop-btn-enruta" onclick="cambiarEstado('${p.id}','en_ruta')">🚚 Salí a repartir</button>
@@ -371,6 +396,13 @@
       botonesEstado = `<button class="stop-btn-entregado" disabled>✅ Entregado</button>`;
     }
 
+    const fotosHtml = (p.foto_problema_url || p.foto_entrega_url) ? `
+      <div class="stop-fotos">
+        ${p.foto_problema_url ? `<a class="stop-foto-item" href="${p.foto_problema_url}" target="_blank" rel="noopener"><img src="${p.foto_problema_url}" class="stop-foto-thumb" alt="Foto local cerrado"><span>Cerrado</span></a>` : ""}
+        ${p.foto_entrega_url ? `<a class="stop-foto-item" href="${p.foto_entrega_url}" target="_blank" rel="noopener"><img src="${p.foto_entrega_url}" class="stop-foto-thumb" alt="Foto de entrega"><span>Entrega</span></a>` : ""}
+      </div>
+    ` : "";
+
     return `
       <div class="stop-card estado-${p.estado}" data-pedido-id="${p.id}">
         <div class="stop-top">
@@ -387,16 +419,80 @@
           <span style="font-weight:800;color:var(--verde-oscuro);">${money(p.total)}</span>
         </div>
         ${p.observaciones ? `<p style="font-size:.82rem;color:#886;background:#fff8e1;padding:6px 8px;border-radius:6px;margin:0 0 10px;">📝 ${p.observaciones}</p>` : ""}
+        ${fotosHtml}
         <div class="stop-actions">
           <a class="stop-btn-maps" href="${linkGoogleMaps(p)}" target="_blank" rel="noopener">📍 Ver mapa</a>
           <a class="stop-btn-llamar" href="tel:${p.telefono}">📞 Llamar</a>
           ${telWsp ? `<a class="stop-btn-whatsapp" href="https://wa.me/${telWsp}?text=${msjWsp}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ""}
           ${botonesEstado}
           ${botonesAtencion}
+          ${botonesFoto}
         </div>
+        <p class="status-msg" id="fotoStatus_${p.id}"></p>
         <div class="accion-inline" id="accionInline_${p.id}"></div>
       </div>
     `;
+  }
+
+  // ==========================================================================
+  // FOTOS DE ENTREGA / "LOCAL CERRADO" — el repartidor saca la foto directo
+  // con la cámara del celular (o elige una de la galería), se comprime en el
+  // navegador para que la subida sea rápida incluso con poca señal, se sube
+  // a Supabase Storage y se asocia al pedido con el RPC guardar_foto_pedido.
+  // ==========================================================================
+  function comprimirImagenParaSubir(archivo, maxAncho = 1280, calidad = 0.72) {
+    return new Promise((resolve) => {
+      const lector = new FileReader();
+      lector.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxAncho) { height = Math.round(height * (maxAncho / width)); width = maxAncho; }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          canvas.toBlob((blob) => resolve(blob || archivo), "image/jpeg", calidad);
+        };
+        img.onerror = () => resolve(archivo);
+        img.src = e.target.result;
+      };
+      lector.onerror = () => resolve(archivo);
+      lector.readAsDataURL(archivo);
+    });
+  }
+
+  async function subirFotoPedido(pedidoId, tipo, inputEl) {
+    const archivo = inputEl.files && inputEl.files[0];
+    if (!archivo) return;
+    const status = document.getElementById(`fotoStatus_${pedidoId}`);
+    if (status) { status.className = "status-msg"; status.textContent = "Subiendo foto..."; }
+
+    const archivoComprimido = await comprimirImagenParaSubir(archivo);
+    const ruta = `${pedidoId}/${tipo}-${Date.now()}.jpg`;
+
+    const { error: errorSubida } = await supa.storage.from("pedidos-fotos").upload(ruta, archivoComprimido, { upsert: false });
+    if (errorSubida) {
+      if (status) { status.classList.add("error"); status.textContent = "No se pudo subir la foto: " + errorSubida.message; }
+      inputEl.value = "";
+      return;
+    }
+
+    const { data: urlData } = supa.storage.from("pedidos-fotos").getPublicUrl(ruta);
+    const url = urlData.publicUrl;
+
+    const { error: errorGuardar } = await supa.rpc("guardar_foto_pedido", { p_pedido_id: pedidoId, p_tipo: tipo, p_url: url });
+    if (errorGuardar) {
+      if (status) { status.classList.add("error"); status.textContent = "La foto se subió pero no se pudo asociar al pedido: " + errorGuardar.message; }
+      inputEl.value = "";
+      return;
+    }
+
+    const p = rutaCache.find(x => x.id === pedidoId);
+    if (p) p[tipo === "problema" ? "foto_problema_url" : "foto_entrega_url"] = url;
+
+    if (status) { status.classList.add("ok"); status.textContent = "Foto guardada."; }
+    inputEl.value = "";
+    renderRuta();
   }
 
   // ==========================================================================
@@ -692,6 +788,13 @@
   }
 
   async function cambiarEstado(pedidoId, nuevoEstado) {
+    if (nuevoEstado === "entregado") {
+      const pActual = rutaCache.find(x => x.id === pedidoId);
+      if (pActual && !pActual.foto_entrega_url) {
+        const seguir = confirm("Todavía no adjuntaste una foto de entrega para este pedido. ¿Marcar como entregado de todos modos?");
+        if (!seguir) return;
+      }
+    }
     const tarjeta = document.querySelector(`[data-pedido-id="${pedidoId}"]`);
     if (tarjeta) tarjeta.style.opacity = "0.5";
 
