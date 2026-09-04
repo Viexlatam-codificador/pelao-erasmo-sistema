@@ -1944,7 +1944,7 @@
 
     let query = supa
       .from("pedidos")
-      .select("id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, precio_unitario_pipeno, cantidad_granadina, precio_unitario_granadina, detalle_productos, observaciones, forma_pago, total, estado, dia_reparto, vendedor_id, necesita_atencion_vendedor, motivo_rechazo, hora_entrega, envio_gratis")
+      .select("id, fecha, nombre_cliente, telefono, direccion, numero, departamento, comuna, region, cantidad_pipeno, precio_unitario_pipeno, cantidad_granadina, precio_unitario_granadina, detalle_productos, observaciones, forma_pago, total, estado, dia_reparto, vendedor_id, necesita_atencion_vendedor, motivo_rechazo, hora_entrega, envio_gratis, foto_problema_url, foto_entrega_url")
       .order("creado_en", { ascending: false })
       .limit(300);
 
@@ -2276,6 +2276,12 @@
       <button type="button" class="modal-cerrar-btn" onclick="cerrarModalPedido()">✕</button>
       <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 10px;padding-right:30px;">Pedido de ${p.nombre_cliente}</p>
       ${p.necesita_atencion_vendedor ? `<p style="font-size:.8rem;background:#fff3e0;color:#8a4b00;border-radius:8px;padding:8px 10px;margin:0 0 10px;">⚠️ Este pedido necesita atención del vendedor${p.motivo_rechazo ? ": " + p.motivo_rechazo : "."}</p>` : ""}
+      ${(p.foto_problema_url || p.foto_entrega_url) ? `
+        <div style="display:flex;gap:10px;margin:0 0 10px;flex-wrap:wrap;">
+          ${p.foto_problema_url ? `<a href="${p.foto_problema_url}" target="_blank" rel="noopener" style="text-align:center;"><img src="${p.foto_problema_url}" alt="Foto local cerrado" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #ddd;display:block;"><span style="display:block;font-size:.62rem;color:#888;margin-top:2px;">Local cerrado</span></a>` : ""}
+          ${p.foto_entrega_url ? `<a href="${p.foto_entrega_url}" target="_blank" rel="noopener" style="text-align:center;"><img src="${p.foto_entrega_url}" alt="Foto de entrega" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #ddd;display:block;"><span style="display:block;font-size:.62rem;color:#888;margin-top:2px;">Entrega</span></a>` : ""}
+        </div>
+      ` : ""}
       <div style="display:flex;gap:16px;flex-wrap:wrap;">
         <div style="flex:1;min-width:220px;">
           <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 6px;">Editar pedido</p>
