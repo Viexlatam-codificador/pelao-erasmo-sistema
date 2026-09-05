@@ -30,6 +30,25 @@ Uso (parado en la raíz del proyecto, sobre una copia/clon nueva):
     --color-claro "#1c7ed6" --color-acento "#e63946" \
     --color-azul "#023e8a" --color-miel "#f4a261" --color-fondo "#f7f7fb"
 
+  IMPORTANTE — conexión a Supabase: este proyecto necesita SU PROPIO
+  proyecto de Supabase (nunca reusar el de otro cliente, o terminarían
+  viendo los datos unos de otros). Una vez creado ese proyecto nuevo y
+  corrido schema.sql ahí, pásale sus datos a este mismo script para que
+  actualice la URL/clave en TODOS los archivos que la usan (assets/ y
+  /api, que si no quedan todos alineados algún archivo se queda apuntando
+  a la base de datos del cliente viejo sin que se note a simple vista):
+
+  python3 scripts/rebrand_cliente.py \
+    --nombre "Distribuidora Ejemplo" --nombre-corto "Ejemplo" \
+    --supabase-url "https://xxxxxxxx.supabase.co" \
+    --supabase-key "sb_publishable_..." \
+    --dominio-interno "distribuidoraejemplo.internal"
+
+  Si no se pasa --dominio-interno, se genera solo a partir de --nombre-corto
+  (ej. "Ejemplo" → "ejemplo.internal"). La URL y la clave se consiguen en
+  Supabase → el proyecto nuevo → Project Settings → API ("Project URL" y
+  la clave "anon" / "publishable" — NUNCA la "service_role").
+
 Requiere Pillow (pip install Pillow --break-system-packages) solo si se
 pasa --logo, para generar los íconos de la app instalable.
 ============================================================================
@@ -75,6 +94,35 @@ VARIABLES_COLOR = {
     "--miel": "color_miel",
     "--bg": "color_fondo",
 }
+
+# Valores actuales de conexión a Supabase de El Pelao Erasmo, hardcodeados en
+# varios archivos (no solo assets/supabase-client.js) — hay que reemplazarlos
+# TODOS por los del proyecto Supabase nuevo del cliente. La clave publicable
+# (anon) es segura de tener en el código porque las tablas usan RLS; la clave
+# secreta (service_role) nunca está en el repo, así que este script no la toca.
+SUPABASE_URL_ACTUAL = "https://kbrnecuueekypztyopua.supabase.co"
+SUPABASE_KEY_ACTUAL = "sb_publishable_nFPkaD6iiTKZMlhIufS9-w__4fdlfqo"
+DOMINIO_INTERNO_ACTUAL = "pelaoerasmo.internal"
+
+ARCHIVOS_CON_CONEXION_SUPABASE = [
+    "assets/supabase-client.js",
+    "index.html",
+    "scripts/crear-cuentas-iniciales.js",
+    "schema.sql",
+    "api/public-order.js",
+    "api/admin-reset-password.js",
+    "api/precios-publicos.js",
+    "api/comunas-publicas.js",
+    "api/admin-users.js",
+    "api/eliminar-usuario.js",
+    "api/vendedores-publicos.js",
+    "api/crear-vendedor.js",
+]
+
+
+def slug_dominio(nombre_corto: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "", nombre_corto.lower())
+    return f"{slug or 'cliente'}.internal"
 
 
 def reemplazar_nombre(nombre_nuevo: str):
@@ -152,6 +200,33 @@ def actualizar_colores(args):
         print("  theme_color / background_color del manifest y las 4 páginas actualizados")
 
 
+def actualizar_conexion_supabase(supabase_url: str, supabase_key: str, dominio_interno: str):
+    reemplazos = [
+        (SUPABASE_URL_ACTUAL, supabase_url),
+        (SUPABASE_KEY_ACTUAL, supabase_key) if supabase_key else None,
+        (DOMINIO_INTERNO_ACTUAL, dominio_interno),
+    ]
+    reemplazos = [r for r in reemplazos if r]
+
+    total = 0
+    for ruta_rel in ARCHIVOS_CON_CONEXION_SUPABASE:
+        ruta = RAIZ / ruta_rel
+        if not ruta.exists():
+            continue
+        contenido = ruta.read_text(encoding="utf-8")
+        cantidad_archivo = 0
+        for viejo, nuevo in reemplazos:
+            cantidad_archivo += contenido.count(viejo)
+            contenido = contenido.replace(viejo, nuevo)
+        if cantidad_archivo:
+            ruta.write_text(contenido, encoding="utf-8")
+            total += cantidad_archivo
+        print(f"  {ruta_rel}: {cantidad_archivo} reemplazo(s)")
+    print(f"Total: {total} reemplazos de conexión a Supabase")
+    print("  (nota: la clave SERVICE_ROLE no vive en el código — esa se configura aparte")
+    print("   como variable de entorno en Vercel, ver REBRANDING.md / PROYECTO_ESTADO.md)")
+
+
 def regenerar_iconos(ruta_logo: Path):
     try:
         from PIL import Image
@@ -210,6 +285,9 @@ def main():
     ap.add_argument("--color-azul", dest="color_azul", default=None, help="--azul")
     ap.add_argument("--color-miel", dest="color_miel", default=None, help="--miel")
     ap.add_argument("--color-fondo", dest="color_fondo", default=None, help="--bg (fondo general)")
+    ap.add_argument("--supabase-url", dest="supabase_url", default=None, help="Project URL del proyecto Supabase nuevo del cliente")
+    ap.add_argument("--supabase-key", dest="supabase_key", default=None, help="Clave anon/publishable del proyecto Supabase nuevo (NUNCA la service_role)")
+    ap.add_argument("--dominio-interno", dest="dominio_interno", default=None, help='Dominio interno para el login por usuario, ej. "distribuidoraejemplo.internal" (si no se pasa, se genera del --nombre-corto)')
     args = ap.parse_args()
 
     print(f"Rebautizando de \"{NOMBRE_ACTUAL}\" a \"{args.nombre}\"...\n")
@@ -233,13 +311,22 @@ def main():
         print("\n4) Sin --logo — se deja el logo actual (assets/logo.jpeg). Puedes correr el script")
         print("   de nuevo más adelante solo con --logo para reemplazarlo.")
 
+    if args.supabase_url:
+        dominio_interno = args.dominio_interno or slug_dominio(args.nombre_corto)
+        print("\n5) Actualizando la conexión a Supabase en todos los archivos que la usan:")
+        actualizar_conexion_supabase(args.supabase_url, args.supabase_key, dominio_interno)
+    else:
+        print("\n5) Sin --supabase-url — el sistema sigue apuntando a la base de datos de")
+        print("   El Pelao Erasmo. NO despliegues así para un cliente nuevo: primero crea su")
+        print("   proyecto Supabase, corre schema.sql ahí, y vuelve a correr este script solo")
+        print("   con --supabase-url, --supabase-key y --dominio-interno.")
+
     print("\nListo. Todavía falta revisar A MANO (tienen contenido propio del negocio, no solo marca):")
-    print("  - index.html (la página pública de cotización/landing)")
+    print("  - index.html (la página pública de cotización/landing) — el texto y los productos")
     print("  - la carpeta /api (textos de correos, WhatsApp Business, etc. si los hay)")
     print("  - scripts/crear-cuentas-iniciales.js (crea el primer usuario admin)")
-    print("  - la base de datos en Supabase: hay que crear un proyecto Supabase nuevo para")
-    print("    esta empresa (no comparte datos con El Pelao Erasmo) y correr schema.sql ahí")
-    print("  - el despliegue en Vercel: un proyecto nuevo apuntando a este repo rebautizado")
+    print("  - el despliegue en Vercel: un proyecto nuevo apuntando a este repo rebautizado,")
+    print("    con SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY como variables de entorno")
     print("\nVer REBRANDING.md para el checklist completo paso a paso.")
 
 
