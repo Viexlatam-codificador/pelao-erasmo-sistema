@@ -281,6 +281,10 @@
     </h2>
     <p style="font-size:.85rem;color:#666;margin:0 0 10px;">Referencia para coordinar con el cliente antes de guardar el pedido.</p>
     <input type="text" id="filtroComunaVendedor" placeholder="Buscar comuna..." style="margin-bottom:10px;" oninput="renderComunasFiltradas()">
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="alternarTodasRegionesComunasVendedor(true)">Expandir todo</button>
+      <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="alternarTodasRegionesComunasVendedor(false)">Colapsar todo</button>
+    </div>
     <div id="comunasWrap">
       <p class="empty-state">Cargando comunas...</p>
     </div>
@@ -507,6 +511,9 @@
   }
 
   let comunasListaCache = [];
+  // Parte siempre cerrada — solo se recuerdan las regiones que el usuario
+  // decidió abrir a mano.
+  const regionesComunasAbiertasVendedor = new Set();
 
   async function cargarComunas() {
     const wrap = document.getElementById("comunasWrap");
@@ -564,8 +571,9 @@
           <td>${c.precio_despacho != null ? money(c.precio_despacho) : "-"}</td>
         </tr>
       `).join("");
+      const abierta = regionesComunasAbiertasVendedor.has(region);
       return `
-        <details class="grupo-desplegable" open>
+        <details class="grupo-desplegable" ${abierta ? "open" : ""} ontoggle="marcarToggleRegionComunasVendedor('${region.replace(/'/g, "\\'")}', this.open)">
           <summary>${region} <span class="grupo-conteo">${comunasRegion.length} comuna${comunasRegion.length === 1 ? "" : "s"}</span></summary>
           <div class="grupo-contenido">
             <table class="orders">
@@ -576,6 +584,18 @@
         </details>
       `;
     }).join("");
+  }
+
+  function marcarToggleRegionComunasVendedor(region, estaAbierta) {
+    if (estaAbierta) regionesComunasAbiertasVendedor.add(region);
+    else regionesComunasAbiertasVendedor.delete(region);
+  }
+
+  function alternarTodasRegionesComunasVendedor(abrirTodas) {
+    const regiones = [...new Set(comunasListaCache.map(c => c.region))];
+    regionesComunasAbiertasVendedor.clear();
+    if (abrirTodas) regiones.forEach(r => regionesComunasAbiertasVendedor.add(r));
+    renderComunasFiltradas();
   }
 
   function proximaFechaParaDia(diaValor) {
