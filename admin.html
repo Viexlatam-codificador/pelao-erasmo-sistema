@@ -850,7 +850,10 @@
   let comunasCache = [];
   const filasCambiadas = new Set();
   const comunasSeleccionadas = new Set();
-  const regionesComunasColapsadas = new Set();
+  // Lista de comunas: parte SIEMPRE cerrada (solo se recuerdan las regiones
+  // que el usuario decidió abrir a mano, no al revés) — así no hay que andar
+  // cerrando una por una cada vez que se entra a esta sección.
+  const regionesComunasAbiertas = new Set();
   // Orden fijo para que "Región Metropolitana" siempre aparezca antes que
   // "V Región" (u otras regiones que se agreguen a futuro, que salen al final).
   const ORDEN_REGIONES = ["Región Metropolitana", "V Región"];
@@ -1063,7 +1066,7 @@
 
     wrap.innerHTML = regiones.map(region => {
       const comunasRegion = lista.filter(c => c.region === region);
-      const abierta = !regionesComunasColapsadas.has(region);
+      const abierta = regionesComunasAbiertas.has(region);
       return `
         <details class="region-grupo" ${abierta ? "open" : ""} ontoggle="marcarToggleRegionComunas('${region.replace(/'/g, "\\'")}', this.open)">
           <summary>${region} <span class="region-conteo">${comunasRegion.length} comuna${comunasRegion.length === 1 ? "" : "s"}</span></summary>
@@ -1081,14 +1084,14 @@
   }
 
   function marcarToggleRegionComunas(region, estaAbierta) {
-    if (estaAbierta) regionesComunasColapsadas.delete(region);
-    else regionesComunasColapsadas.add(region);
+    if (estaAbierta) regionesComunasAbiertas.add(region);
+    else regionesComunasAbiertas.delete(region);
   }
 
   function alternarTodasRegionesComunas(abrirTodas) {
     const regiones = [...new Set(comunasCache.map(c => c.region))];
-    regionesComunasColapsadas.clear();
-    if (!abrirTodas) regiones.forEach(r => regionesComunasColapsadas.add(r));
+    regionesComunasAbiertas.clear();
+    if (abrirTodas) regiones.forEach(r => regionesComunasAbiertas.add(r));
     renderComunas();
   }
 
