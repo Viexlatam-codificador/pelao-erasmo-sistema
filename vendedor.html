@@ -1359,6 +1359,7 @@
               <button type="button" class="stop-btn-maps" title="Enviar cotización al cliente" onclick="toggleCotizacionGuardada('${p.id}')">🧾</button>
               ${(p.foto_entrega_url || p.foto_problema_url) ? `<a class="stop-btn-maps" href="${p.foto_entrega_url || p.foto_problema_url}" target="_blank" rel="noopener" title="${p.foto_entrega_url ? "Ver foto de entrega" : "Ver foto de local cerrado"}">📷</a>` : ""}
               ${filaEditable(p) ? `<button type="button" class="stop-btn-enruta" title="Editar" onclick="abrirEdicionPedidoVendedor('${p.id}')">✏️</button>` : ""}
+              ${p.estado === "anulado" ? `<button type="button" class="stop-btn-enruta" title="Reactivar para volver a vender" onclick="reactivarPedidoAnuladoVendedor('${p.id}')">♻️</button>` : ""}
             </div>
           </td>
         </tr>
@@ -1636,6 +1637,32 @@
       payload: {
         rpc: "deshacer_cambio_pedido",
         params: { p_pedido_id: id, p_estado: "rechazado", p_fecha: fechaAnterior, p_necesita_atencion_vendedor: true, p_motivo_rechazo: motivoAnterior }
+      },
+      creadoPor: perfilActual ? perfilActual.nombre_completo : null
+    });
+  }
+
+  async function reactivarPedidoAnuladoVendedor(id) {
+    if (!confirm("¿Reactivar este pedido anulado? Volverá a quedar pendiente para seguir el proceso normal.")) return;
+
+    const { error } = await supa.rpc("vendedor_reactivar_pedido_anulado", { p_pedido_id: id });
+    if (error) {
+      alert("No se pudo reactivar: " + error.message);
+      return;
+    }
+
+    await cargarMisPedidos();
+    await cargarAlertasAtencion();
+    deshacerConHistorial("Pedido reactivado", async () => {
+      const { error: e2 } = await supa.rpc("deshacer_cambio_pedido", { p_pedido_id: id, p_estado: "anulado" });
+      if (e2) throw e2;
+      await cargarMisPedidos();
+      await cargarAlertasAtencion();
+    }, {
+      pagina: "vendedor", pedidoId: id, accion: "rpc",
+      payload: {
+        rpc: "deshacer_cambio_pedido",
+        params: { p_pedido_id: id, p_estado: "anulado" }
       },
       creadoPor: perfilActual ? perfilActual.nombre_completo : null
     });
