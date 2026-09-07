@@ -218,9 +218,11 @@
     <p style="font-size:.78rem;color:#888;margin:4px 0 6px;" id="totalesProductosTitulo"></p>
     <div class="resumen-grid" id="totalesProductosWrap" style="margin-bottom:14px;"></div>
 
-    <div style="display:flex;gap:10px;margin-bottom:8px;">
+    <div style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
       <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="marcarTodosPedidosVisibles(true)">Marcar todos</button>
       <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="marcarTodosPedidosVisibles(false)">Desmarcar todos</button>
+      <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="alternarTodasRegionesPedidos(true)">Expandir regiones</button>
+      <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="alternarTodasRegionesPedidos(false)">Colapsar regiones</button>
     </div>
 
     <div class="lote-bar" id="lotePedidosBar" style="display:none;">
@@ -470,6 +472,10 @@
       <p style="font-size:.75rem;color:#888;margin:6px 0 0;">Esto solo prepara el cambio (igual que editar una fila a mano) — sigue faltando tocar "Guardar todos los cambios" para que quede guardado de verdad.</p>
     </div>
 
+    <div style="display:flex;gap:10px;margin-bottom:8px;">
+      <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="alternarTodasRegionesComunas(true)">Expandir todo</button>
+      <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="alternarTodasRegionesComunas(false)">Colapsar todo</button>
+    </div>
     <div id="comunasAdminWrap">
       <p class="empty-state">Cargando comunas...</p>
     </div>
@@ -844,6 +850,7 @@
   let comunasCache = [];
   const filasCambiadas = new Set();
   const comunasSeleccionadas = new Set();
+  const regionesComunasColapsadas = new Set();
   // Orden fijo para que "Región Metropolitana" siempre aparezca antes que
   // "V Región" (u otras regiones que se agreguen a futuro, que salen al final).
   const ORDEN_REGIONES = ["Región Metropolitana", "V Región"];
@@ -1056,8 +1063,9 @@
 
     wrap.innerHTML = regiones.map(region => {
       const comunasRegion = lista.filter(c => c.region === region);
+      const abierta = !regionesComunasColapsadas.has(region);
       return `
-        <details class="region-grupo" open>
+        <details class="region-grupo" ${abierta ? "open" : ""} ontoggle="marcarToggleRegionComunas('${region.replace(/'/g, "\\'")}', this.open)">
           <summary>${region} <span class="region-conteo">${comunasRegion.length} comuna${comunasRegion.length === 1 ? "" : "s"}</span></summary>
           <div class="region-contenido">
             <table class="orders comunas">
@@ -1070,6 +1078,18 @@
         </details>
       `;
     }).join("");
+  }
+
+  function marcarToggleRegionComunas(region, estaAbierta) {
+    if (estaAbierta) regionesComunasColapsadas.delete(region);
+    else regionesComunasColapsadas.add(region);
+  }
+
+  function alternarTodasRegionesComunas(abrirTodas) {
+    const regiones = [...new Set(comunasCache.map(c => c.region))];
+    regionesComunasColapsadas.clear();
+    if (!abrirTodas) regiones.forEach(r => regionesComunasColapsadas.add(r));
+    renderComunas();
   }
 
   function marcarCambio(id, campo, valor) {
@@ -1865,6 +1885,7 @@
   // ==========================================================================
   let pedidosCache = [];
   let pedidoExpandidoId = null;
+  const regionesPedidosColapsadas = new Set();
   const pedidoHistorialCache = {};
   // Selección múltiple de pedidos, para poder cambiarles la fecha de
   // despacho a todos de una vez (por ejemplo antes de generar la ruta).
@@ -2217,6 +2238,7 @@
           </td>
           <td style="white-space:nowrap;">
             <button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;" onclick="abrirModalPedido('${p.id}')">Ver</button>
+            ${p.estado === "anulado" ? `<button type="button" class="btn" style="background:#d9f3e0;color:var(--verde-oscuro);padding:6px 10px;font-size:.75rem;" onclick="reactivarPedidoAnulado('${p.id}')">♻️ Reactivar</button>` : ""}
             <button type="button" class="btn" style="background:#f2d4d1;color:var(--rojo);padding:6px 10px;font-size:.75rem;" onclick="eliminarPedido('${p.id}')">Eliminar</button>
           </td>
         </tr>
@@ -2227,8 +2249,9 @@
 
     wrap.innerHTML = regiones.map(region => {
       const pedidosRegion = listaOrdenada.filter(p => (p.region || "Sin región") === region);
+      const abierta = !regionesPedidosColapsadas.has(region);
       return `
-        <details class="region-grupo" open>
+        <details class="region-grupo" ${abierta ? "open" : ""} ontoggle="marcarToggleRegionPedidos('${region.replace(/'/g, "\\'")}', this.open)">
           <summary>${region} <span class="region-conteo">${pedidosRegion.length} pedido${pedidosRegion.length === 1 ? "" : "s"}</span></summary>
           <div class="region-contenido">
             <table class="orders comunas pedidos-tabla">
@@ -2255,6 +2278,18 @@
 
     const totalMostrado = pedidosCache.reduce((a, p) => a + (p.estado !== "anulado" ? p.total : 0), 0);
     resumenTexto.textContent = `${pedidosCache.length} pedido(s) — suma ${money(totalMostrado)} (excluye anulados). Se muestran hasta 300 resultados más recientes según el filtro.`;
+  }
+
+  function marcarToggleRegionPedidos(region, estaAbierta) {
+    if (estaAbierta) regionesPedidosColapsadas.delete(region);
+    else regionesPedidosColapsadas.add(region);
+  }
+
+  function alternarTodasRegionesPedidos(abrirTodas) {
+    const regiones = [...new Set(pedidosCache.map(p => p.region || "Sin región"))];
+    regionesPedidosColapsadas.clear();
+    if (!abrirTodas) regiones.forEach(r => regionesPedidosColapsadas.add(r));
+    renderPedidosAdmin();
   }
 
   // ==========================================================================
@@ -2289,6 +2324,12 @@
           ${p.foto_problema_url ? `<a href="${p.foto_problema_url}" target="_blank" rel="noopener" style="text-align:center;"><img src="${p.foto_problema_url}" alt="Foto local cerrado" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #ddd;display:block;"><span style="display:block;font-size:.62rem;color:#888;margin-top:2px;">Local cerrado</span></a>` : ""}
           ${p.foto_entrega_url ? `<a href="${p.foto_entrega_url}" target="_blank" rel="noopener" style="text-align:center;"><img src="${p.foto_entrega_url}" alt="Foto de entrega" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #ddd;display:block;"><span style="display:block;font-size:.62rem;color:#888;margin-top:2px;">Entrega</span></a>` : ""}
         </div>
+      ` : ""}
+      ${p.estado === "anulado" ? `
+        <p style="font-size:.8rem;background:#fdecea;color:#c62828;border-radius:8px;padding:8px 10px;margin:0 0 10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <span>🚫 Este pedido está anulado.</span>
+          <button type="button" class="btn" style="background:#d9f3e0;color:var(--verde-oscuro);padding:6px 10px;font-size:.75rem;" onclick="reactivarPedidoAnulado('${p.id}')">♻️ Reactivar pedido</button>
+        </p>
       ` : ""}
       <div style="display:flex;gap:16px;flex-wrap:wrap;">
         <div style="flex:1;min-width:220px;">
@@ -2408,9 +2449,14 @@
   async function cambiarEstadoPedido(id, nuevoEstado) {
     const p = pedidosCache.find(x => x.id === id);
     const estadoAnterior = p ? p.estado : null;
-    const { error } = await supa.from("pedidos").update({ estado: nuevoEstado }).eq("id", id);
+    const { data: filasActualizadas, error } = await supa.from("pedidos").update({ estado: nuevoEstado }).eq("id", id).select("id");
     if (error) {
       alert("No se pudo cambiar el estado: " + error.message);
+      cargarPedidosAdmin();
+      return;
+    }
+    if (!filasActualizadas || !filasActualizadas.length) {
+      alert("No se pudo cambiar el estado: el pedido no se actualizó (puede que ya no exista o que algo lo esté bloqueando). Actualiza la lista y prueba de nuevo.");
       cargarPedidosAdmin();
       return;
     }
@@ -2432,6 +2478,13 @@
         creadoPor: perfilActual ? perfilActual.nombre_completo : null
       });
     }
+  }
+
+  function reactivarPedidoAnulado(id) {
+    const p = pedidosCache.find(x => x.id === id);
+    const nombre = p ? p.nombre_cliente : "este pedido";
+    if (!confirm(`¿Reactivar el pedido de ${nombre}? Vuelve a quedar "Pendiente", como si nunca se hubiera anulado.`)) return;
+    cambiarEstadoPedido(id, "pendiente");
   }
 
   async function cambiarFechaPedido(id, nuevaFecha) {
