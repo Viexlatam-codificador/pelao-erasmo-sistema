@@ -2428,11 +2428,13 @@
         </div>
         <div style="flex:1;min-width:280px;">
           <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 6px;">Productos del pedido</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+            <div style="flex:1;min-width:120px;"><label style="margin:0;">🧃 Bidones Pipeño 5L</label><input type="number" min="0" id="editPipenoCant_${p.id}" value="${pipeno.cantidad}" onchange="marcarCambioPipenoEdicion('${p.id}','cantidad',this.value)"></div>
+            <div style="flex:1;min-width:120px;"><label style="margin:0;">Precio Pipeño c/u</label><input type="number" min="0" id="editPipenoPrecio_${p.id}" value="${pipeno.precio}" onchange="marcarCambioPipenoEdicion('${p.id}','precio',this.value)"></div>
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-            <div style="flex:1;min-width:100px;"><label style="margin:0;">Bidones Pipeño 5L</label><input type="number" min="0" id="editPipenoCant_${p.id}" value="${pipeno.cantidad}" onchange="marcarCambioPipenoEdicion('${p.id}','cantidad',this.value)"></div>
-            <div style="flex:1;min-width:100px;"><label style="margin:0;">Precio c/u</label><input type="number" min="0" id="editPipenoPrecio_${p.id}" value="${pipeno.precio}" onchange="marcarCambioPipenoEdicion('${p.id}','precio',this.value)"></div>
-            <div style="flex:1;min-width:100px;"><label style="margin:0;">Displays Granadina</label><input type="number" min="0" id="editGranadinaCant_${p.id}" value="${granadina.cantidad}" onchange="marcarCambioGranadinaEdicion('${p.id}','cantidad',this.value)"></div>
-            <div style="flex:1;min-width:100px;"><label style="margin:0;">Precio c/u</label><input type="number" min="0" id="editGranadinaPrecio_${p.id}" value="${granadina.precio}" onchange="marcarCambioGranadinaEdicion('${p.id}','precio',this.value)"></div>
+            <div style="flex:1;min-width:120px;"><label style="margin:0;">🍇 Displays Granadina</label><input type="number" min="0" id="editGranadinaCant_${p.id}" value="${granadina.cantidad}" onchange="marcarCambioGranadinaEdicion('${p.id}','cantidad',this.value)"></div>
+            <div style="flex:1;min-width:120px;"><label style="margin:0;">Precio Granadina c/u</label><input type="number" min="0" id="editGranadinaPrecio_${p.id}" value="${granadina.precio}" onchange="marcarCambioGranadinaEdicion('${p.id}','precio',this.value)"></div>
           </div>
           <p style="font-size:.72rem;color:#888;margin:0 0 6px;">Otros productos (ej. Pipeño 2L) — elige del catálogo o agrégalo libre:</p>
           <table class="orders comunas" style="font-size:.8rem;">
