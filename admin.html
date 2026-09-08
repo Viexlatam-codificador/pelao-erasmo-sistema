@@ -1898,6 +1898,15 @@
   // esté abierto para poder agregar/quitar líneas sin perder lo ya tocado).
   const edicionProductosCache = {};
   const edicionDespachoCache = {};
+  // Pipeño 5L y Granadina tienen sus propias columnas en la tabla
+  // pedidos (cantidad_pipeno/cantidad_granadina) — se editan acá con
+  // campos propios, igual que en el perfil de vendedor, para que nunca
+  // terminen guardados también como línea genérica dentro de
+  // detalle_productos (eso es lo que causaba que aparecieran duplicados
+  // a los repartidores, o que se borraran solos al editar un pedido que
+  // ya tenía algún producto extra).
+  const edicionPipenoCache = {};
+  const edicionGranadinaCache = {};
 
   // Sugiere el día de reparto habitual de la comuna que se acaba de escribir
   // (no lo fuerza — el admin puede seguir cambiando el desplegable a mano
@@ -1913,18 +1922,23 @@
 
   function inicializarEdicionPedido(p) {
     if (edicionProductosCache[p.id]) return;
-    let lineas = (p.detalle_productos || []).map(l => ({
-      nombre: l.nombre || "", unidad: l.unidad || "",
-      cantidad: Number(l.cantidad) || 0, precio_unitario: Number(l.precio_unitario) || 0
-    }));
-    // Compatibilidad con pedidos antiguos que no guardaron detalle_productos:
-    // se reconstruye la línea a partir de las columnas sueltas que sí tienen.
-    if (!lineas.length) {
-      if (p.cantidad_pipeno > 0) lineas.push({ nombre: "Pipeño 5 Litros", unidad: "bidón", cantidad: p.cantidad_pipeno, precio_unitario: p.precio_unitario_pipeno || 0 });
-      if (p.cantidad_granadina > 0) lineas.push({ nombre: "Granadina 700cc", unidad: "display", cantidad: p.cantidad_granadina, precio_unitario: p.precio_unitario_granadina || 0 });
-    }
+    // Acá solo se guardan los productos EXTRA (todo lo que no sea Pipeño 5L
+    // ni Granadina) — esos dos se editan con sus propios campos de cantidad
+    // y precio más abajo. Si detalle_productos trae alguna línea vieja de
+    // Pipeño 5L/Granadina (de pedidos editados antes de este arreglo), se
+    // descarta acá para no duplicarla.
+    const lineas = (p.detalle_productos || [])
+      .filter(l => l && l.nombre && !/pipe.o\s*5|granadina/i.test(l.nombre))
+      .map(l => ({
+        nombre: l.nombre || "", unidad: l.unidad || "",
+        cantidad: Number(l.cantidad) || 0, precio_unitario: Number(l.precio_unitario) || 0
+      }));
     edicionProductosCache[p.id] = lineas;
-    const subtotalOriginal = lineas.reduce((a, l) => a + l.cantidad * l.precio_unitario, 0);
+    edicionPipenoCache[p.id] = { cantidad: Number(p.cantidad_pipeno) || 0, precio: Number(p.precio_unitario_pipeno) || 0 };
+    edicionGranadinaCache[p.id] = { cantidad: Number(p.cantidad_granadina) || 0, precio: Number(p.precio_unitario_granadina) || 0 };
+    const subtotalOriginal = lineas.reduce((a, l) => a + l.cantidad * l.precio_unitario, 0)
+      + edicionPipenoCache[p.id].cantidad * edicionPipenoCache[p.id].precio
+      + edicionGranadinaCache[p.id].cantidad * edicionGranadinaCache[p.id].precio;
     // El despacho no se guarda como columna aparte — se recupera restando el
     // subtotal de productos al total ya guardado, así no se pierde el valor
     // de despacho que tenía el pedido aunque no esté en su propia columna.
@@ -1933,7 +1947,11 @@
 
   function recalcularTotalEdicion(id) {
     const lineas = edicionProductosCache[id] || [];
-    const subtotal = lineas.reduce((a, l) => a + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), 0);
+    const pipeno = edicionPipenoCache[id] || { cantidad: 0, precio: 0 };
+    const granadina = edicionGranadinaCache[id] || { cantidad: 0, precio: 0 };
+    const subtotal = lineas.reduce((a, l) => a + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), 0)
+      + (Number(pipeno.cantidad) || 0) * (Number(pipeno.precio) || 0)
+      + (Number(granadina.cantidad) || 0) * (Number(granadina.precio) || 0);
     const despacho = Number(edicionDespachoCache[id]) || 0;
     const el = document.getElementById(`editTotalPreview_${id}`);
     if (el) el.textContent = money(subtotal + despacho);
@@ -1941,6 +1959,33 @@
       const sub = document.getElementById(`editLineaSubtotal_${id}_${i}`);
       if (sub) sub.textContent = money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0));
     });
+  }
+
+  function marcarCambioPipenoEdicion(id, campo, valor) {
+    if (!edicionPipenoCache[id]) edicionPipenoCache[id] = { cantidad: 0, precio: 0 };
+    edicionPipenoCache[id][campo] = parseFloat(valor) || 0;
+    recalcularTotalEdicion(id);
+  }
+
+  function marcarCambioGranadinaEdicion(id, campo, valor) {
+    if (!edicionGranadinaCache[id]) edicionGranadinaCache[id] = { cantidad: 0, precio: 0 };
+    edicionGranadinaCache[id][campo] = parseFloat(valor) || 0;
+    recalcularTotalEdicion(id);
+  }
+
+  function agregarLineaPedidoDesdeCatalogo(id, selectEl) {
+    const catalogoId = selectEl.value;
+    selectEl.value = "";
+    if (!catalogoId) return;
+    const prod = productosCache.find(cp => String(cp.id) === String(catalogoId));
+    if (!prod) return;
+    if (!edicionProductosCache[id]) edicionProductosCache[id] = [];
+    edicionProductosCache[id].push({
+      nombre: prod.nombre, unidad: prod.unidad_venta || "",
+      cantidad: 1, precio_unitario: Number(prod.precio_fijo) || 0
+    });
+    pedidoExpandidoId = id;
+    refrescarModalPedido();
   }
 
   function marcarCambioLineaPedido(id, index, campo, valor) {
@@ -2305,8 +2350,12 @@
     const historial = pedidoHistorialCache[p.id];
     inicializarEdicionPedido(p);
     const lineas = edicionProductosCache[p.id] || [];
+    const pipeno = edicionPipenoCache[p.id] || { cantidad: 0, precio: 0 };
+    const granadina = edicionGranadinaCache[p.id] || { cantidad: 0, precio: 0 };
     const despacho = edicionDespachoCache[p.id] || 0;
-    const subtotalActual = lineas.reduce((a, l) => a + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), 0);
+    const subtotalActual = lineas.reduce((a, l) => a + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), 0)
+      + (Number(pipeno.cantidad) || 0) * (Number(pipeno.precio) || 0)
+      + (Number(granadina.cantidad) || 0) * (Number(granadina.precio) || 0);
 
     const filasProductos = lineas.map((l, i) => `
       <tr>
@@ -2379,11 +2428,24 @@
         </div>
         <div style="flex:1;min-width:280px;">
           <p style="font-size:.8rem;font-weight:700;color:var(--verde-oscuro);margin:0 0 6px;">Productos del pedido</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+            <div style="flex:1;min-width:100px;"><label style="margin:0;">Bidones Pipeño 5L</label><input type="number" min="0" id="editPipenoCant_${p.id}" value="${pipeno.cantidad}" onchange="marcarCambioPipenoEdicion('${p.id}','cantidad',this.value)"></div>
+            <div style="flex:1;min-width:100px;"><label style="margin:0;">Precio c/u</label><input type="number" min="0" id="editPipenoPrecio_${p.id}" value="${pipeno.precio}" onchange="marcarCambioPipenoEdicion('${p.id}','precio',this.value)"></div>
+            <div style="flex:1;min-width:100px;"><label style="margin:0;">Displays Granadina</label><input type="number" min="0" id="editGranadinaCant_${p.id}" value="${granadina.cantidad}" onchange="marcarCambioGranadinaEdicion('${p.id}','cantidad',this.value)"></div>
+            <div style="flex:1;min-width:100px;"><label style="margin:0;">Precio c/u</label><input type="number" min="0" id="editGranadinaPrecio_${p.id}" value="${granadina.precio}" onchange="marcarCambioGranadinaEdicion('${p.id}','precio',this.value)"></div>
+          </div>
+          <p style="font-size:.72rem;color:#888;margin:0 0 6px;">Otros productos (ej. Pipeño 2L) — elige del catálogo o agrégalo libre:</p>
           <table class="orders comunas" style="font-size:.8rem;">
             <thead><tr><th>Producto</th><th>Cant.</th><th>Precio unit.</th><th>Subtotal</th><th></th></tr></thead>
-            <tbody>${filasProductos || '<tr><td colspan="5" style="color:#888;">Sin productos — agrega uno abajo.</td></tr>'}</tbody>
+            <tbody>${filasProductos || '<tr><td colspan="5" style="color:#888;">Sin productos extra.</td></tr>'}</tbody>
           </table>
-          <button type="button" class="btn btn-secondary" style="margin-top:8px;padding:6px 12px;font-size:.76rem;" onclick="agregarLineaPedido('${p.id}')">+ Agregar producto</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+            <select id="editCatalogoExtra_${p.id}" style="max-width:220px;" onchange="agregarLineaPedidoDesdeCatalogo('${p.id}', this)">
+              <option value="">+ Agregar del catálogo...</option>
+              ${productosCache.filter(cp => cp.activo !== false && !/pipe.o\s*5|granadina/i.test(cp.nombre)).map(cp => `<option value="${cp.id}">${cp.nombre}</option>`).join("")}
+            </select>
+            <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:.76rem;" onclick="agregarLineaPedido('${p.id}')">+ Agregar producto libre</button>
+          </div>
 
           <div style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
             <div>
@@ -2536,10 +2598,12 @@
         subtotal: (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0)
       }));
 
-    const lineaPipeno = lineasValidas.find(l => /pipe.o\s*5/i.test(l.nombre));
-    const lineaGranadina = lineasValidas.find(l => /granadina/i.test(l.nombre));
+    const pipeno = edicionPipenoCache[id] || { cantidad: 0, precio: 0 };
+    const granadina = edicionGranadinaCache[id] || { cantidad: 0, precio: 0 };
     const despacho = Number(edicionDespachoCache[id]) || 0;
-    const subtotalProductos = lineasValidas.reduce((a, l) => a + l.subtotal, 0);
+    const subtotalProductos = lineasValidas.reduce((a, l) => a + l.subtotal, 0)
+      + (Number(pipeno.cantidad) || 0) * (Number(pipeno.precio) || 0)
+      + (Number(granadina.cantidad) || 0) * (Number(granadina.precio) || 0);
 
     const payload = {
       nombre_cliente: document.getElementById(`editNombre_${id}`).value.trim(),
@@ -2553,10 +2617,10 @@
       hora_entrega: document.getElementById(`editHora_${id}`).value.trim() || null,
       forma_pago: document.getElementById(`editFormaPago_${id}`).value,
       observaciones: document.getElementById(`editObs_${id}`).value.trim() || null,
-      cantidad_pipeno: lineaPipeno ? lineaPipeno.cantidad : 0,
-      precio_unitario_pipeno: lineaPipeno ? lineaPipeno.precio_unitario : 0,
-      cantidad_granadina: lineaGranadina ? lineaGranadina.cantidad : 0,
-      precio_unitario_granadina: lineaGranadina ? lineaGranadina.precio_unitario : 0,
+      cantidad_pipeno: Number(pipeno.cantidad) || 0,
+      precio_unitario_pipeno: Number(pipeno.precio) || 0,
+      cantidad_granadina: Number(granadina.cantidad) || 0,
+      precio_unitario_granadina: Number(granadina.precio) || 0,
       detalle_productos: lineasValidas,
       total: subtotalProductos + despacho,
       necesita_atencion_vendedor: false,
@@ -2586,6 +2650,8 @@
     // había quedado editado localmente).
     delete edicionProductosCache[id];
     delete edicionDespachoCache[id];
+    delete edicionPipenoCache[id];
+    delete edicionGranadinaCache[id];
     cargarPedidosAdmin();
     if (valoresAnteriores) {
       deshacerConHistorial("Pedido actualizado", async () => {
@@ -2610,6 +2676,8 @@
     }
     delete edicionProductosCache[id];
     delete edicionDespachoCache[id];
+    delete edicionPipenoCache[id];
+    delete edicionGranadinaCache[id];
     if (pedidoExpandidoId === id) cerrarModalPedido();
     cargarPedidosAdmin();
     cargarResumenPedidos();
