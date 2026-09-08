@@ -234,7 +234,10 @@
         </div>
         <label>Productos extra</label>
         <div id="productosExtraWrap"></div>
-        <button type="button" class="btn btn-secondary" style="padding:8px 12px;font-size:.8rem;margin-top:4px;" onclick="agregarProductoExtra()">+ Agregar producto extra</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+          <select id="catalogoExtraNuevo" style="max-width:220px;" onchange="agregarProductoExtraDesdeCatalogo(this)">${opcionesCatalogoProductosVendedor()}</select>
+          <button type="button" class="btn btn-secondary" style="padding:8px 12px;font-size:.8rem;" onclick="agregarProductoExtra()">+ Agregar producto libre</button>
+        </div>
       </div>
     </details>
 
@@ -384,6 +387,9 @@
   let edicionProductoExtraSeq = 0;
   let plantillaAbiertaId = null;
   let cotizacionGuardadaAbiertaId = null;
+  // Catálogo de productos (ej. "Pipeño 2 Litros") para poder elegirlos de
+  // una lista en vez de tener que escribir el nombre a mano cada vez.
+  let catalogoProductosVendedorCache = [];
 
   requireSession({ rolesPermitidos: ["vendedor", "admin"] }).then((perfil) => {
     if (!perfil) return;
@@ -395,12 +401,29 @@
     document.getElementById("informeMesVendedor").value = new Date().toISOString().slice(0, 7);
     document.getElementById("fechaPedido").value = new Date().toISOString().slice(0, 10);
     cargarPreciosProductos();
+    cargarCatalogoProductosVendedor();
     cargarMisPedidos();
     cargarComunas();
     cargarAlertasAtencion();
     verMisEstadisticas();
     inicializarBotonHistorial("vendedor");
   });
+
+  async function cargarCatalogoProductosVendedor() {
+    const { data } = await supa
+      .from("productos")
+      .select("id, nombre, unidad_venta, precio_fijo, activo")
+      .order("orden", { ascending: true });
+    // Pipeño 5L y Granadina ya tienen sus propios campos de cantidad más
+    // arriba — acá solo interesan los demás productos del catálogo (ej.
+    // Pipeño 2L), para no duplicarlos.
+    catalogoProductosVendedorCache = (data || []).filter(p => p.activo !== false && !/pipe.o\s*5|granadina/i.test(p.nombre || ""));
+  }
+
+  function opcionesCatalogoProductosVendedor() {
+    return `<option value="">+ Agregar del catálogo...</option>` +
+      catalogoProductosVendedorCache.map(p => `<option value="${p.id}">${p.nombre}</option>`).join("");
+  }
 
   // Trae los precios de Pipeño 5L (por tramos) y Granadina que dejó el admin
   // guardados — si todavía no ha guardado ninguno, se usan los valores de
@@ -725,6 +748,17 @@
   function agregarProductoExtra() {
     productosExtraCache.push({ id: ++productoExtraSeq, nombre: "", cantidad: 1, precio: 0 });
     renderProductosExtra();
+  }
+
+  function agregarProductoExtraDesdeCatalogo(selectEl) {
+    const catalogoId = selectEl.value;
+    selectEl.value = "";
+    if (!catalogoId) return;
+    const prod = catalogoProductosVendedorCache.find(p => String(p.id) === String(catalogoId));
+    if (!prod) return;
+    productosExtraCache.push({ id: ++productoExtraSeq, nombre: prod.nombre, cantidad: 1, precio: Number(prod.precio_fijo) || 0 });
+    renderProductosExtra();
+    actualizarTotales();
   }
 
   function quitarProductoExtra(id) {
@@ -1731,7 +1765,10 @@
           <p style="font-size:.72rem;color:#886;margin:2px 0 0;">💲 Usa estos campos solo si el jefe autorizó un precio distinto al normal para este pedido.</p>
           <label>Otros productos / precios especiales de este pedido</label>
           <div id="ed_productosExtraWrap_${p.id}"></div>
-          <button type="button" class="btn btn-secondary" style="padding:8px 12px;font-size:.8rem;margin-top:4px;" onclick="agregarProductoExtraEdicion('${p.id}')">+ Agregar producto</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+            <select id="ed_catalogoExtra_${p.id}" style="max-width:220px;" onchange="agregarProductoExtraEdicionDesdeCatalogo('${p.id}', this)">${opcionesCatalogoProductosVendedor()}</select>
+            <button type="button" class="btn btn-secondary" style="padding:8px 12px;font-size:.8rem;" onclick="agregarProductoExtraEdicion('${p.id}')">+ Agregar producto libre</button>
+          </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
             <div style="flex:1;min-width:140px;">
               <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="ed_enviogratis_${p.id}" style="width:auto;" ${p.envio_gratis ? "checked" : ""} onchange="onCambioEnvioGratisEdicion('${p.id}')"> Envío gratuito</label>
@@ -1776,6 +1813,17 @@
   function agregarProductoExtraEdicion(pedidoId) {
     if (!edicionProductosExtraCache[pedidoId]) edicionProductosExtraCache[pedidoId] = [];
     edicionProductosExtraCache[pedidoId].push({ id: ++edicionProductoExtraSeq, nombre: "", cantidad: 1, precio: 0 });
+    renderProductosExtraEdicion(pedidoId);
+  }
+
+  function agregarProductoExtraEdicionDesdeCatalogo(pedidoId, selectEl) {
+    const catalogoId = selectEl.value;
+    selectEl.value = "";
+    if (!catalogoId) return;
+    const prod = catalogoProductosVendedorCache.find(p => String(p.id) === String(catalogoId));
+    if (!prod) return;
+    if (!edicionProductosExtraCache[pedidoId]) edicionProductosExtraCache[pedidoId] = [];
+    edicionProductosExtraCache[pedidoId].push({ id: ++edicionProductoExtraSeq, nombre: prod.nombre, cantidad: 1, precio: Number(prod.precio_fijo) || 0 });
     renderProductosExtraEdicion(pedidoId);
   }
 
