@@ -192,7 +192,7 @@
 
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
-        <label>Cantidad Pipeño (bidones)</label>
+        <label>🧃 Cantidad Pipeño (bidones)</label>
         <div class="stepper-vendedor">
           <button type="button" onclick="stepQtyVendedor('cantidadPipeno',-1)">−</button>
           <input type="number" id="cantidadPipeno" min="0" value="0">
@@ -200,7 +200,7 @@
         </div>
       </div>
       <div style="flex:1;">
-        <label>Cantidad Granadina (displays)</label>
+        <label>🍇 Cantidad Granadina (displays)</label>
         <div class="stepper-vendedor">
           <button type="button" onclick="stepQtyVendedor('cantidadGranadina',-1)">−</button>
           <input type="number" id="cantidadGranadina" min="0" value="0">
@@ -1755,11 +1755,11 @@
             <div style="flex:1;min-width:140px;"><label>Hora entrega (opcional)</label><input type="text" id="ed_hora_${p.id}" placeholder="Ej: 14 a 16 hrs" value="${escAttr(p.hora_entrega || "")}"></div>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:120px;"><label>Bidones Pipeño</label><input type="number" min="0" id="ed_pipeno_${p.id}" value="${p.cantidad_pipeno}"></div>
+            <div style="flex:1;min-width:120px;"><label>🧃 Bidones Pipeño</label><input type="number" min="0" id="ed_pipeno_${p.id}" value="${p.cantidad_pipeno}"></div>
             <div style="flex:1;min-width:120px;"><label>Precio especial Pipeño c/u (opcional)</label><input type="number" min="0" id="ed_precioespecial_${p.id}" value="${precioEspecialPipenoPrefill}" placeholder="Usar precio normal"></div>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:120px;"><label>Displays Granadina</label><input type="number" min="0" id="ed_granadina_${p.id}" value="${p.cantidad_granadina}"></div>
+            <div style="flex:1;min-width:120px;"><label>🍇 Displays Granadina</label><input type="number" min="0" id="ed_granadina_${p.id}" value="${p.cantidad_granadina}"></div>
             <div style="flex:1;min-width:120px;"><label>Precio especial Granadina c/u (opcional)</label><input type="number" min="0" id="ed_precioespecialgranadina_${p.id}" value="${precioEspecialGranadinaPrefill}" placeholder="Usar precio normal"></div>
           </div>
           <p style="font-size:.72rem;color:#886;margin:2px 0 0;">💲 Usa estos campos solo si el jefe autorizó un precio distinto al normal para este pedido.</p>
