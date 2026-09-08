@@ -259,8 +259,12 @@
     const partes = [];
     if (p.cantidad_pipeno > 0) partes.push(`${p.cantidad_pipeno} Pipeño 5L`);
     if (p.cantidad_granadina > 0) partes.push(`${p.cantidad_granadina} Granadina`);
+    // Igual que en calcularTotalesProductosReparto: Pipeño 5L y Granadina ya
+    // se muestran arriba desde sus columnas propias — si detalle_productos
+    // trae además una línea con ese mismo nombre (de un pedido editado antes
+    // del arreglo de admin.html), se descarta acá para no mostrarlo doble.
     (p.detalle_productos || []).forEach(l => {
-      if (l && l.nombre && l.cantidad) partes.push(`${l.cantidad} ${l.nombre}`);
+      if (l && l.nombre && l.cantidad && !/pipe.o\s*5|granadina/i.test(l.nombre)) partes.push(`${l.cantidad} ${l.nombre}`);
     });
     return partes.length ? partes.join(" · ") : "Sin detalle de productos";
   }
